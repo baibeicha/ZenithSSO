@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"AuthServer/api"
 	"AuthServer/internal"
@@ -30,9 +31,60 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 		MaxAge:           300,
 	}))
 
+	r.Get("/.well-known/openid-configuration", h.DiscoveryHandler)
+	r.Get("/api/v1/jwks", h.JwksHandler)
+	r.Get("/api/v1/userinfo", h.UserInfoHandler)
+
 	r.Post("/api/v1/register", h.RegisterHandler)
 	r.Post("/api/v1/token", h.TokenHandler)
 	r.Post("/api/v1/authorize", h.AuthorizeHandler)
+}
+
+func (h *AuthHandler) DiscoveryHandler(w http.ResponseWriter, r *http.Request) {
+	issuer := "http://localhost:8080"
+	data := map[string]interface{}{
+		"issuer":                                issuer,
+		"authorization_endpoint":                issuer + "/authorize.html",
+		"token_endpoint":                        issuer + "/api/v1/token",
+		"userinfo_endpoint":                     issuer + "/api/v1/userinfo",
+		"jwks_uri":                              issuer + "/api/v1/jwks",
+		"response_types_supported":              []string{"code", "id_token"},
+		"subject_types_supported":               []string{"public"},
+		"id_token_signing_alg_values_supported": []string{"RS256"},
+		"scopes_supported":                      []string{"openid", "profile", "email"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+func (h *AuthHandler) JwksHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(h.authService.GetJWKS())
+}
+
+func (h *AuthHandler) UserInfoHandler(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	user, err := h.authService.GetUserInfo(r.Context(), token)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_token"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"sub":      user.ID,
+		"name":     user.Username,
+		"email":    user.Email,
+		"username": user.Username,
+	})
 }
 
 func (h *AuthHandler) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {

@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 )
 
@@ -23,6 +24,8 @@ type TokenProvider interface {
 	VerifyToken(tokenString string) (bool, error)
 	RefreshToken(refreshToken string, user *db.User) (*jwt.Tokens, error)
 	DeleteToken(refreshToken string) error
+	GetPublicJWKS() jwt.JWKS
+	GetClaims(tokenString string) (*jwt.TokenClaims, error)
 }
 
 type AuthServer struct {
@@ -258,4 +261,20 @@ func (s *AuthServer) Logout(ctx context.Context, token *api.Token) (*api.Status,
 	}
 
 	return &api.Status{Status: true}, nil
+}
+
+func (s *AuthServer) GetUserInfo(ctx context.Context, accessToken string) (*db.User, error) {
+	claims, err := s.tokenProvider.GetClaims(accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	userID, _ := claims.GetIssuer()
+	id, _ := strconv.ParseUint(userID, 10, 64)
+
+	return s.repo.GetUserById(ctx, id)
+}
+
+func (s *AuthServer) GetJWKS() jwt.JWKS {
+	return s.tokenProvider.GetPublicJWKS()
 }
