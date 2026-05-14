@@ -69,64 +69,39 @@
         .link:hover {
             text-decoration: underline;
         }
-
-        #message {
-            margin-top: 1rem;
-            text-align: center;
-            font-size: 0.9rem;
-        }
     </style>
 </head>
 <body>
 
 <div class="box">
     <h2 style="text-align: center; margin-top: 0;">Sign In</h2>
-    <form id="authForm">
+    <form id="authForm" action="/api/v1/authorize" method="POST">
+        <input type="hidden" id="client_id" name="client_id">
+        <input type="hidden" id="redirect_uri" name="redirect_uri">
+        <input type="hidden" id="state" name="state">
+        <input type="hidden" id="code_challenge" name="code_challenge">
+        <input type="hidden" id="code_challenge_method" name="code_challenge_method">
+
         <div class="form-group">
             <label for="username">Username</label>
-            <input type="text" id="username" required>
+            <input type="text" id="username" name="username" required>
         </div>
         <div class="form-group">
             <label for="password">Password</label>
-            <input type="password" id="password" required>
+            <input type="password" id="password" name="password" required>
         </div>
         <button type="submit">Authorize</button>
     </form>
     <a href="/register.html" class="link">Don't have an account? Register</a>
-    <div id="message"></div>
 </div>
 
 <script>
-    document.getElementById('authForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const username = document.getElementById('username').value;
-        const password = document.getElementById('password').value;
-        const messageEl = document.getElementById('message');
-
-        try {
-            const response = await fetch('/api/v1/token', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({Username: username, Password: password})
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                messageEl.style.color = "green";
-                messageEl.innerText = "Authorized successfully!";
-                localStorage.setItem('access_token', data.AccessToken);
-                localStorage.setItem('refresh_token', data.RefreshToken);
-            } else {
-                messageEl.style.color = "red";
-                messageEl.innerText = data.error || "Authorization failed";
-            }
-        } catch (error) {
-            messageEl.style.color = "red";
-            messageEl.innerText = "Network error";
-        }
-    });
+    const urlParams = new URLSearchParams(window.location.search);
+    document.getElementById('client_id').value = urlParams.get('client_id') || '';
+    document.getElementById('redirect_uri').value = urlParams.get('redirect_uri') || '';
+    document.getElementById('state').value = urlParams.get('state') || '';
+    document.getElementById('code_challenge').value = urlParams.get('code_challenge') || '';
+    document.getElementById('code_challenge_method').value = urlParams.get('code_challenge_method') || '';
 </script>
 
 </body>

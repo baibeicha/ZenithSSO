@@ -2,6 +2,7 @@ package rest
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"AuthServer/api"
@@ -31,6 +32,32 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 
 	r.Post("/api/v1/register", h.RegisterHandler)
 	r.Post("/api/v1/token", h.TokenHandler)
+	r.Post("/api/v1/authorize", h.AuthorizeHandler)
+}
+
+func (h *AuthHandler) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid request form", http.StatusBadRequest)
+		return
+	}
+
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+	clientID := r.FormValue("client_id")
+	redirectURI := r.FormValue("redirect_uri")
+	state := r.FormValue("state")
+	codeChallenge := r.FormValue("code_challenge")
+	codeChallengeMethod := r.FormValue("code_challenge_method")
+
+	code, err := h.authService.GenerateAuthorizationCode(r.Context(), username, password,
+		clientID, redirectURI, codeChallenge, codeChallengeMethod)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	redirectURL := fmt.Sprintf("%s?code=%s&state=%s", redirectURI, code, state)
+	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
