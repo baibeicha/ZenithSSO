@@ -1,3 +1,10 @@
+grpc:
+  port: 50051
+  tls:
+    enabled: true
+    cert_path: "./certs/server.crt"
+    key_path: "./certs/server.key"
+
 server:
   port: 8080
 
@@ -17,4 +24,5 @@ jwt:
     access: 1
     refresh: 15
     unit: m
-  secret: "super-secret-key-change-me"
+  private_key_path: "certs/private.pem"
+  public_key_path: "certs/public.pem"
