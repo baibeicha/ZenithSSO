@@ -28,6 +28,22 @@ func (r *Repository) CreateUser(ctx context.Context, u *User) (uint64, error) {
 	return id, nil
 }
 
+func (r *Repository) UserExistsByUsername(ctx context.Context, username string) (bool, error) {
+	result := make([]bool, 1)
+	err := r.db.Select(&result, "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)", username)
+
+	if err != nil {
+		slog.Error("error checking user exists", "err", err)
+		return false, err
+	}
+
+	if len(result) == 0 {
+		return false, nil
+	}
+
+	return result[0], nil
+}
+
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
 		SELECT 
@@ -39,8 +55,7 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 				jsonb_agg(
 					jsonb_build_object(
 						'id', s.id, 
-						'name', s.name, 
-						'workspace_id', s.workspace_id
+						'name', s.name 
 					)
 				) FILTER (WHERE s.id IS NOT NULL), '[]'
 			) as scopes
@@ -69,8 +84,7 @@ func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*U
 				jsonb_agg(
 					jsonb_build_object(
 						'id', s.id, 
-						'name', s.name, 
-						'workspace_id', s.workspace_id
+						'name', s.name 
 					)
 				) FILTER (WHERE s.id IS NOT NULL), '[]'
 			) as scopes
@@ -104,46 +118,11 @@ func (r *Repository) DeleteUser(ctx context.Context, id uint64) error {
 	return err
 }
 
-func (r *Repository) CreateWorkspace(ctx context.Context, name string) (uint64, error) {
+func (r *Repository) CreateScope(ctx context.Context, name string) (uint64, error) {
 	var id uint64
-	query := `INSERT INTO workspaces (name) VALUES ($1) RETURNING id`
+	query := `INSERT INTO scopes (name) VALUES ($1) RETURNING id`
 
 	err := r.db.QueryRowContext(ctx, query, name).Scan(&id)
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
-func (r *Repository) WorkspaceExists(ctx context.Context, name string) bool {
-	result := make([]bool, 1)
-	err := r.db.Select(&result, "SELECT EXISTS(SELECT 1 FROM workspaces WHERE name = $1)", name)
-
-	if err != nil {
-		slog.Error("error checking workspace exists", "err", err)
-		return false
-	}
-
-	if len(result) == 0 {
-		return false
-	}
-
-	return result[0]
-}
-
-func (r *Repository) GetAllWorkspaces(ctx context.Context) ([]Workspace, error) {
-	var workspaces []Workspace
-	query := `SELECT id, name FROM workspaces`
-
-	err := r.db.SelectContext(ctx, &workspaces, query)
-	return workspaces, err
-}
-
-func (r *Repository) CreateScope(ctx context.Context, name string, workspaceID uint64) (uint64, error) {
-	var id uint64
-	query := `INSERT INTO scopes (name, workspace_id) VALUES ($1, $2) RETURNING id`
-
-	err := r.db.QueryRowContext(ctx, query, name, workspaceID).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
@@ -183,8 +162,7 @@ func (r *Repository) GetUserById(ctx context.Context, userID uint64) (*User, err
 				jsonb_agg(
 					jsonb_build_object(
 						'id', s.id, 
-						'name', s.name, 
-						'workspace_id', s.workspace_id
+						'name', s.name 
 					)
 				) FILTER (WHERE s.id IS NOT NULL), '[]'
 			) as scopes
