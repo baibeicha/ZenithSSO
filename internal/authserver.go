@@ -6,22 +6,33 @@ import (
 	"AuthServer/internal/db"
 	"AuthServer/internal/encoder"
 	"AuthServer/internal/jwt"
+	"AuthServer/internal/utils"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"time"
 )
 
 type TokenProvider interface {
 	GenerateTokens(user *db.User) (*jwt.Tokens, error)
+	GenerateIdToken(user *db.User, clientID string) (string, error)
 	VerifyToken(tokenString string) (bool, error)
 	RefreshToken(refreshToken string, user *db.User) (*jwt.Tokens, error)
 	DeleteToken(refreshToken string) error
+	GetPublicJWKS() jwt.JWKS
+	GetClaims(tokenString string) (*jwt.TokenClaims, error)
 }
+
 type AuthServer struct {
 	api.UnimplementedAuthServiceServer
 	repo          *db.Repository
+	clientsRepo   *db.ClientsRepository
+	authCodesRepo *db.AuthCodesRepository
 	tokenProvider TokenProvider
 	log           *slog.Logger
 }
@@ -29,9 +40,95 @@ type AuthServer struct {
 func NewAuthServer(DB *db.DB, tokenProvider TokenProvider, log *slog.Logger) *AuthServer {
 	return &AuthServer{
 		repo:          db.NewRepository(DB),
+		clientsRepo:   db.NewClientsRepository(DB),
+		authCodesRepo: db.NewAuthCodesRepository(DB),
 		tokenProvider: tokenProvider,
 		log:           log,
 	}
+}
+
+func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, password, clientID, redirectURI, codeChallenge, codeChallengeMethod string) (string, error) {
+	user, err := s.repo.GetUserByUsername(ctx, username)
+	if user == nil || err != nil {
+		return "", errors.New("invalid credentials")
+	}
+
+	if !encoder.CheckPasswordHash(password, user.Password) {
+		return "", errors.New("invalid credentials")
+	}
+
+	_, err = s.clientsRepo.GetClientByID(ctx, clientID)
+	if err != nil {
+		return "", errors.New("invalid client_id")
+	}
+
+	code, err := utils.GenerateAuthCode()
+	if err != nil {
+		return "", err
+	}
+
+	authCode := &db.AuthCode{
+		Code:                code,
+		ClientID:            clientID,
+		UserID:              user.ID,
+		RedirectURI:         redirectURI,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		ExpiresAt:           time.Now().Add(5 * time.Minute),
+	}
+
+	err = s.authCodesRepo.SaveCode(ctx, authCode)
+	if err != nil {
+		return "", err
+	}
+
+	return code, nil
+}
+
+func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, clientID, redirectURI, codeVerifier string) (*jwt.Tokens, error) {
+	authCode, err := s.authCodesRepo.GetAndDeleteCode(ctx, code)
+	if err != nil {
+		return nil, errors.New("invalid or expired authorization code")
+	}
+
+	if authCode.ClientID != clientID {
+		return nil, errors.New("invalid client_id")
+	}
+
+	if authCode.RedirectURI != redirectURI {
+		return nil, errors.New("invalid redirect_uri")
+	}
+
+	if time.Now().After(authCode.ExpiresAt) {
+		return nil, errors.New("authorization code expired")
+	}
+
+	hasher := sha256.New()
+	hasher.Write([]byte(codeVerifier))
+	expectedChallenge := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
+
+	if authCode.CodeChallenge != expectedChallenge {
+		return nil, errors.New("invalid code_verifier")
+	}
+
+	user, err := s.repo.GetUserById(ctx, authCode.UserID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	tokens, err := s.tokenProvider.GenerateTokens(user)
+	if err != nil {
+		return nil, err
+	}
+
+	idToken, err := s.tokenProvider.GenerateIdToken(user, clientID)
+	if err != nil {
+		return nil, err
+	}
+
+	tokens.IdToken = idToken
+
+	return tokens, nil
 }
 
 func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *config.Config) error {
@@ -164,4 +261,20 @@ func (s *AuthServer) Logout(ctx context.Context, token *api.Token) (*api.Status,
 	}
 
 	return &api.Status{Status: true}, nil
+}
+
+func (s *AuthServer) GetUserInfo(ctx context.Context, accessToken string) (*db.User, error) {
+	claims, err := s.tokenProvider.GetClaims(accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	userID, _ := claims.GetIssuer()
+	id, _ := strconv.ParseUint(userID, 10, 64)
+
+	return s.repo.GetUserById(ctx, id)
+}
+
+func (s *AuthServer) GetJWKS() jwt.JWKS {
+	return s.tokenProvider.GetPublicJWKS()
 }

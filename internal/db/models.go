@@ -64,3 +64,20 @@ type Token struct {
 	ExpiresAt time.Time `db:"expires_at"`
 	UserId    uint64    `db:"user_id"`
 }
+
+type Client struct {
+	ID               string          `db:"id"`
+	ClientID         string          `db:"client_id"`
+	ClientSecretHash string          `db:"client_secret_hash"`
+	RedirectURIs     json.RawMessage `db:"redirect_uris"`
+}
+
+type AuthCode struct {
+	Code                string    `db:"code"`
+	ClientID            string    `db:"client_id"`
+	UserID              uint64    `db:"user_id"`
+	RedirectURI         string    `db:"redirect_uri"`
+	CodeChallenge       string    `db:"code_challenge"`
+	CodeChallengeMethod string    `db:"code_challenge_method"`
+	ExpiresAt           time.Time `db:"expires_at"`
+}
