@@ -58,6 +58,24 @@ func (s *ScopesList) String() string {
 	return ""
 }
 
+func (s *ScopesList) StringFromAllowed(allowedScopes string) string {
+	builder := strings.Builder{}
+	for _, scope := range *s {
+		if strings.Contains(allowedScopes, scope.Name) {
+			builder.WriteString(strconv.FormatUint(scope.WorkspaceID, 10))
+			builder.WriteString("_")
+			builder.WriteString(scope.Name)
+			builder.WriteString(";")
+		}
+	}
+
+	if builder.Len() > 0 {
+		return builder.String()[:builder.Len()-1]
+	}
+
+	return ""
+}
+
 type Token struct {
 	Id        uint64    `db:"id"`
 	Token     string    `db:"token"`
@@ -70,6 +88,7 @@ type Client struct {
 	ClientID         string          `db:"client_id"`
 	ClientSecretHash string          `db:"client_secret_hash"`
 	RedirectURIs     json.RawMessage `db:"redirect_uris"`
+	AllowedScopes    json.RawMessage `db:"allowed_scopes"`
 }
 
 type AuthCode struct {
@@ -79,5 +98,6 @@ type AuthCode struct {
 	RedirectURI         string    `db:"redirect_uri"`
 	CodeChallenge       string    `db:"code_challenge"`
 	CodeChallengeMethod string    `db:"code_challenge_method"`
+	Scopes              string    `db:"scopes"`
 	ExpiresAt           time.Time `db:"expires_at"`
 }

@@ -68,11 +68,12 @@ func main() {
 
 	r := chi.NewRouter()
 
-	authHandler := rest.NewAuthHandler(authService)
+	authHandler := rest.NewAuthHandler(authService, cfg.GetBool("server.secured"))
 	authHandler.RegisterRoutes(r)
 
 	fileServer := http.FileServer(http.Dir("./web"))
 	r.Handle("/*", http.StripPrefix("/", fileServer))
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./web/static"))))
 
 	httpPort := cfg.GetInt("server.port")
 	httpServer := &http.Server{
