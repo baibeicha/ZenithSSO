@@ -54,7 +54,7 @@ func NewJwtTokenProvider(cfg *config.Config, repo TokenRepository, accessTTL, re
 	}, nil
 }
 
-func GetTtlUnit(unit string) time.Duration {
+func GetTimeUnit(unit string) time.Duration {
 	switch unit {
 	case "ms", "":
 		return ms

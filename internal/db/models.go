@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type User struct {
@@ -58,8 +59,8 @@ func (s *ScopesList) String() string {
 }
 
 type Token struct {
-	Id        uint64 `db:"id"`
-	Token     string `db:"token"`
-	ExpiresAt int64  `db:"expires_at"`
-	UserId    uint64 `db:"user_id"`
+	Id        uint64    `db:"id"`
+	Token     string    `db:"token"`
+	ExpiresAt time.Time `db:"expires_at"`
+	UserId    uint64    `db:"user_id"`
 }
