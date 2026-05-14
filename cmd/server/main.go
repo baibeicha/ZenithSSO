@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -17,6 +19,9 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	cfg := config.MustLoad("config")
 
 	datasource := config.NewDatasourceFromConfig(cfg)
@@ -32,7 +37,7 @@ func main() {
 		return
 	}
 
-	ttlUnit := jwt.GetTtlUnit(cfg.GetString("jwt.ttl.unit"))
+	ttlUnit := jwt.GetTimeUnit(cfg.GetString("jwt.ttl.unit"))
 	accessTTL := cfg.GetDuration("jwt.ttl.access") * ttlUnit
 	refreshTTL := cfg.GetDuration("jwt.ttl.refresh") * ttlUnit
 
@@ -44,14 +49,18 @@ func main() {
 		return
 	}
 
+	cleanupIntervalUnit := jwt.GetTimeUnit(cfg.GetString("jwt.cleanup.unit"))
+	cleanupInterval := cfg.GetDuration("jwt.cleanup.cleanup") * cleanupIntervalUnit
+	go jwt.StartTokenCleanup(ctx, tokensRepository, cleanupInterval)
+
 	authService := internal.NewAuthServer(DB, tokenProvider, slog.Default())
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
-	defer cancel()
-	if err := authService.SetUpSuperuser(ctx, cfg); err != nil {
+	suCfg, cansel := context.WithTimeout(ctx, 5*time.Second)
+	if err := authService.SetUpSuperuser(suCfg, cfg); err != nil {
 		slog.Error("Error creating superuser", "err", err)
 		return
 	}
+	defer cansel()
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
@@ -78,8 +87,13 @@ func main() {
 
 	api.RegisterAuthServiceServer(server, authService)
 
-	slog.Info(fmt.Sprintf("Starting gRPC server on port %d", cfg.GRPC.Port))
+	go func() {
+		<-ctx.Done()
+		slog.Info("Shutting down gRPC server gracefully...")
+		server.GracefulStop()
+	}()
 
+	slog.Info(fmt.Sprintf("Starting gRPC server on port %d", cfg.GRPC.Port))
 	if err := server.Serve(listener); err != nil {
 		slog.Error("Failed to serve", "err", err)
 	}
