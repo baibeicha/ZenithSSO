@@ -2,12 +2,18 @@ package jwt
 
 import (
 	"AuthServer/internal/db"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+type TokenRepository interface {
+	InBlackList(tokenString string) bool
+	SaveToBlackList(tokenString, userID string) error
+}
 
 type Tokens struct {
 	AccessToken  string
@@ -26,19 +32,13 @@ func (tp *JwtTokenProvider) GenerateAccess(user *db.User) (string, error) {
 		Scopes:   user.Scopes.String(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    strconv.FormatUint(user.ID, 10),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.ttlUnit * time.Duration(tp.accessTTL))),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	tokenString, err := token.SignedString(tp.secretKey)
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(tp.privateKey)
 }
 
 func (tp *JwtTokenProvider) GenerateRefresh(user *db.User) (string, error) {
@@ -46,29 +46,24 @@ func (tp *JwtTokenProvider) GenerateRefresh(user *db.User) (string, error) {
 		Username: user.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    strconv.FormatUint(user.ID, 10),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.ttlUnit * time.Duration(tp.refreshTTL))),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	tokenString, err := token.SignedString(tp.secretKey)
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(tp.privateKey)
 }
 
 func (tp *JwtTokenProvider) GenerateTokens(user *db.User) (*Tokens, error) {
 	accessToken, err := tp.GenerateAccess(user)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
+
 	refreshToken, err := tp.GenerateRefresh(user)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
 	return &Tokens{
@@ -82,11 +77,11 @@ func (tp *JwtTokenProvider) VerifyToken(tokenString string) (bool, error) {
 		return false, nil
 	}
 
-	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signature algorithm: %v", token.Header["alg"])
+	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signature algorithm: %v", t.Header["alg"])
 		}
-		return tp.secretKey, nil
+		return tp.publicKey, nil
 	})
 
 	if err != nil {
@@ -94,49 +89,58 @@ func (tp *JwtTokenProvider) VerifyToken(tokenString string) (bool, error) {
 	}
 
 	if tp.repo.InBlackList(tokenString) {
-		return false, nil
+		return false, errors.New("token is in blacklist")
 	}
 
 	return token.Valid, nil
 }
 
 func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *db.User) (*Tokens, error) {
-	if isValid, err := tp.VerifyToken(refreshToken); isValid && err == nil {
-		accessToken, err := tp.GenerateAccess(user)
-		if err != nil {
-			return nil, err
-		}
+	isValid, err := tp.VerifyToken(refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token: %w", err)
+	}
+	if !isValid {
+		return nil, errors.New("refresh token is not valid")
+	}
 
-		return &Tokens{
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken,
-		}, nil
-	} else if err != nil {
+	accessToken, err := tp.GenerateAccess(user)
+	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+
+	return &Tokens{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}, nil
 }
 
 func (tp *JwtTokenProvider) DeleteToken(refreshToken string) error {
-	token, err := jwt.ParseWithClaims(refreshToken, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signature algorithm: %v", token.Header["alg"])
+	token, err := jwt.ParseWithClaims(refreshToken, &TokenClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signature algorithm: %v", t.Header["alg"])
 		}
-		return tp.secretKey, nil
+		return tp.publicKey, nil
 	})
 
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse token for deletion: %w", err)
 	}
 
-	userId, err := token.Claims.GetIssuer()
-	if err != nil {
-		return err
+	claims, ok := token.Claims.(*TokenClaims)
+	if !ok {
+		return errors.New("invalid token claims")
 	}
 
-	err = tp.repo.SaveToBlackList(refreshToken, userId)
+	userID, err := claims.GetIssuer()
+	if err != nil || userID == "" {
+		return errors.New("failed to get user ID from token")
+	}
+
+	err = tp.repo.SaveToBlackList(refreshToken, userID)
 	if err != nil {
 		return fmt.Errorf("error saving token to blacklist: %w", err)
 	}
+
 	return nil
 }

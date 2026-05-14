@@ -9,8 +9,7 @@ import (
 
 type TokensRepository struct {
 	DB         *db.DB
-	refreshTTL uint
-	ttlUnit    time.Duration
+	refreshTTL time.Duration
 }
 
 func (r *TokensRepository) InBlackList(refreshToken string) bool {
@@ -31,17 +30,16 @@ func (r *TokensRepository) InBlackList(refreshToken string) bool {
 
 func (r *TokensRepository) SaveToBlackList(refreshToken string, userID string) error {
 	_, err := r.DB.Exec("INSERT INTO tokens (token, expires_at, user_id) VALUES ($1, $2, $3)",
-		refreshToken, time.Now().Add(r.ttlUnit*time.Duration(r.refreshTTL)).UnixMilli(), userID)
+		refreshToken, time.Now().Add(r.refreshTTL).UnixMilli(), userID)
 	if err != nil {
 		return fmt.Errorf("error saving tokens: %w", err)
 	}
 	return nil
 }
 
-func NewTokensRepository(DB *db.DB, refreshTTL uint, ttlUnit time.Duration) *TokensRepository {
+func NewTokensRepository(DB *db.DB, refreshTTL time.Duration) *TokensRepository {
 	return &TokensRepository{
 		DB:         DB,
 		refreshTTL: refreshTTL,
-		ttlUnit:    ttlUnit,
 	}
 }
