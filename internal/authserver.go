@@ -241,17 +241,10 @@ func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, client
 }
 
 func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *config.Config) error {
-	rootWorkspace := "main"
-	if s.repo.WorkspaceExists(ctx, rootWorkspace) {
-		s.log.Debug("Root workspace exists, no need to register superuser")
-		return nil
-	}
-
 	superuserUsername := cfg.GetString("superuser.username")
 	if superuserUsername == "" {
 		return errors.New("superuser username is empty")
 	}
-
 	superuserEmail := cfg.GetString("superuser.email")
 	if superuserEmail == "" {
 		return errors.New("superuser email is empty")
@@ -262,13 +255,17 @@ func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *config.Config) err
 		return errors.New("superuser password is empty")
 	}
 
-	workspaceId, err := s.repo.CreateWorkspace(ctx, "main")
-	if err != nil {
-		return fmt.Errorf("error registering workspace '%s': %w", rootWorkspace, err)
+	if exists, err := s.repo.UserExistsByUsername(ctx, superuserUsername); err != nil || exists {
+		if err != nil {
+			return fmt.Errorf("error checking if user %s exists: %w", superuserUsername, err)
+		}
+
+		s.log.Info(fmt.Sprintf("superuser %s already exists", superuserUsername))
+		return nil
 	}
 
 	superuserScope := "root"
-	superuserScopeId, err := s.repo.CreateScope(ctx, superuserScope, workspaceId)
+	superuserScopeId, err := s.repo.CreateScope(ctx, superuserScope)
 	if err != nil {
 		return fmt.Errorf("error registering scope '%s': %w", superuserScope, err)
 	}
@@ -293,7 +290,7 @@ func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *config.Config) err
 		return fmt.Errorf("error adding scope to superuser '%s': %w", superuserScope, err)
 	}
 
-	s.log.Debug("Successfully registered superuser '%s'", superuserUsername)
+	s.log.Info(fmt.Sprintf("Successfully registered superuser '%s'", superuserUsername))
 	return nil
 }
 

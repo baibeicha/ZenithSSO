@@ -3,7 +3,6 @@ package db
 import (
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -17,15 +16,8 @@ type User struct {
 }
 
 type Scope struct {
-	ID          uint64 `db:"id" json:"id"`
-	Name        string `db:"name" json:"name"`
-	WorkspaceID uint64 `db:"workspace_id" json:"workspace_id"`
-}
-
-type Workspace struct {
-	ID     uint64     `db:"id"`
-	Name   string     `db:"name"`
-	Scopes ScopesList `db:"scopes"`
+	ID   uint64 `db:"id" json:"id"`
+	Name string `db:"name" json:"name"`
 }
 
 type ScopesList []Scope
@@ -45,10 +37,8 @@ func (s *ScopesList) Scan(val any) error {
 func (s *ScopesList) String() string {
 	builder := strings.Builder{}
 	for _, scope := range *s {
-		builder.WriteString(strconv.FormatUint(scope.WorkspaceID, 10))
-		builder.WriteString("_")
 		builder.WriteString(scope.Name)
-		builder.WriteString(";")
+		builder.WriteString(" ")
 	}
 
 	if builder.Len() > 0 {
@@ -62,10 +52,8 @@ func (s *ScopesList) StringFromAllowed(allowedScopes string) string {
 	builder := strings.Builder{}
 	for _, scope := range *s {
 		if strings.Contains(allowedScopes, scope.Name) {
-			builder.WriteString(strconv.FormatUint(scope.WorkspaceID, 10))
-			builder.WriteString("_")
 			builder.WriteString(scope.Name)
-			builder.WriteString(";")
+			builder.WriteString(" ")
 		}
 	}
 
