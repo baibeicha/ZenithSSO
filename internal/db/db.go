@@ -1,7 +1,7 @@
 package db
 
 import (
-	"AuthServer/configs"
+	"AuthServer/config"
 	"fmt"
 	"log/slog"
 
@@ -39,7 +39,7 @@ func Connect(url, dbname, user, password, sslmode string) (*DB, error) {
 	}, nil
 }
 
-func ConnectSource(source *configs.Datasource) (*DB, error) {
+func ConnectSource(source *config.Datasource) (*DB, error) {
 	db, err := Connect(
 		source.Url,
 		source.DB,

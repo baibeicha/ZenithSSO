@@ -2,7 +2,7 @@ package main
 
 import (
 	"AuthServer/api"
-	"AuthServer/configs"
+	"AuthServer/config"
 	"AuthServer/internal"
 	"AuthServer/internal/db"
 	"AuthServer/internal/jwt"
@@ -13,16 +13,13 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
-	cfg, err := configs.NewConfig("config")
-	if err != nil {
-		slog.Error("Error loading config", "err", err)
-		return
-	}
+	cfg := config.MustLoad("config")
 
-	datasource := configs.NewDatasourceFromConfig(cfg)
+	datasource := config.NewDatasourceFromConfig(cfg)
 	DB, err := db.ConnectSource(datasource)
 	if err != nil {
 		slog.Error("Error while connecting to database", "err", err)
@@ -35,37 +32,55 @@ func main() {
 		return
 	}
 
-	tokenProvider := jwt.NewJwtTokenProvider(cfg, DB)
+	ttlUnit := jwt.GetTtlUnit(cfg.GetString("jwt.ttl.unit"))
+	accessTTL := cfg.GetDuration("jwt.ttl.access") * ttlUnit
+	refreshTTL := cfg.GetDuration("jwt.ttl.refresh") * ttlUnit
+
+	tokensRepository := jwt.NewTokensRepository(DB, refreshTTL)
+
+	tokenProvider, err := jwt.NewJwtTokenProvider(cfg, tokensRepository, accessTTL, refreshTTL)
+	if err != nil {
+		slog.Error("Error loading JWT token provider", "err", err)
+		return
+	}
+
 	authService := internal.NewAuthServer(DB, tokenProvider, slog.Default())
 
-	ctx, cansel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
+	defer cancel()
 	if err := authService.SetUpSuperuser(ctx, cfg); err != nil {
 		slog.Error("Error creating superuser", "err", err)
 		return
 	}
 
-	grpcServer := grpc.NewServer()
-	api.RegisterAuthServiceServer(grpcServer, authService)
-
-	port := cfg.GetServerPort()
-	address := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", address)
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
-		slog.Error("Error while starting listener", "err", err)
+		slog.Error("Failed to listen", "err", err)
 		return
 	}
-	defer func() {
-		err := listener.Close()
-		if err != nil {
-			slog.Error("Error closing listener", "err", err)
-		}
-	}()
+	defer listener.Close()
 
-	defer grpcServer.GracefulStop()
-	cansel()
-	err = grpcServer.Serve(listener)
-	if err != nil {
-		slog.Error("Error while starting gRPC server", "err", err)
-		return
+	var opts []grpc.ServerOption
+
+	if cfg.GRPC.TLS.Enabled {
+		creds, err := credentials.NewServerTLSFromFile(cfg.GRPC.TLS.CertPath, cfg.GRPC.TLS.KeyPath)
+		if err != nil {
+			slog.Error("Failed to setup TLS", "err", err)
+			return
+		}
+		opts = append(opts, grpc.Creds(creds))
+		slog.Info("gRPC server is starting in SECURE mode (TLS enabled)")
+	} else {
+		slog.Info("gRPC server is starting in INSECURE mode (plaintext)")
+	}
+
+	server := grpc.NewServer(opts...)
+
+	api.RegisterAuthServiceServer(server, authService)
+
+	slog.Info(fmt.Sprintf("Starting gRPC server on port %d", cfg.GRPC.Port))
+
+	if err := server.Serve(listener); err != nil {
+		slog.Error("Failed to serve", "err", err)
 	}
 }

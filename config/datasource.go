@@ -1,4 +1,4 @@
-package configs
+package config
 
 type Datasource struct {
 	Url      string
