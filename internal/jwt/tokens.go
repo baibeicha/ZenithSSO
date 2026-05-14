@@ -18,8 +18,9 @@ type TokenRepository interface {
 }
 
 type Tokens struct {
-	AccessToken  string
-	RefreshToken string
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	IdToken      string `json:"id_token,omitempty"`
 }
 
 type TokenClaims struct {
@@ -51,6 +52,21 @@ func (tp *JwtTokenProvider) GenerateRefresh(user *db.User) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(tp.privateKey)
+}
+
+func (tp *JwtTokenProvider) GenerateIdToken(user *db.User, clientID string) (string, error) {
+	claims := jwt.MapClaims{
+		"iss":   "http://localhost:8080",
+		"sub":   strconv.FormatUint(user.ID, 10),
+		"aud":   clientID,
+		"exp":   time.Now().Add(tp.accessTTL).Unix(),
+		"iat":   time.Now().Unix(),
+		"name":  user.Username,
+		"email": user.Email,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

@@ -2,7 +2,9 @@ package rest
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"AuthServer/api"
 	"AuthServer/internal"
@@ -29,8 +31,84 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 		MaxAge:           300,
 	}))
 
+	r.Get("/.well-known/openid-configuration", h.DiscoveryHandler)
+	r.Get("/api/v1/jwks", h.JwksHandler)
+	r.Get("/api/v1/userinfo", h.UserInfoHandler)
+
 	r.Post("/api/v1/register", h.RegisterHandler)
 	r.Post("/api/v1/token", h.TokenHandler)
+	r.Post("/api/v1/authorize", h.AuthorizeHandler)
+}
+
+func (h *AuthHandler) DiscoveryHandler(w http.ResponseWriter, r *http.Request) {
+	issuer := "http://localhost:8080"
+	data := map[string]interface{}{
+		"issuer":                                issuer,
+		"authorization_endpoint":                issuer + "/authorize.html",
+		"token_endpoint":                        issuer + "/api/v1/token",
+		"userinfo_endpoint":                     issuer + "/api/v1/userinfo",
+		"jwks_uri":                              issuer + "/api/v1/jwks",
+		"response_types_supported":              []string{"code", "id_token"},
+		"subject_types_supported":               []string{"public"},
+		"id_token_signing_alg_values_supported": []string{"RS256"},
+		"scopes_supported":                      []string{"openid", "profile", "email"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+func (h *AuthHandler) JwksHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(h.authService.GetJWKS())
+}
+
+func (h *AuthHandler) UserInfoHandler(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	user, err := h.authService.GetUserInfo(r.Context(), token)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_token"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"sub":      user.ID,
+		"name":     user.Username,
+		"email":    user.Email,
+		"username": user.Username,
+	})
+}
+
+func (h *AuthHandler) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid request form", http.StatusBadRequest)
+		return
+	}
+
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+	clientID := r.FormValue("client_id")
+	redirectURI := r.FormValue("redirect_uri")
+	state := r.FormValue("state")
+	codeChallenge := r.FormValue("code_challenge")
+	codeChallengeMethod := r.FormValue("code_challenge_method")
+
+	code, err := h.authService.GenerateAuthorizationCode(r.Context(), username, password, clientID, redirectURI, codeChallenge, codeChallengeMethod)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	redirectURL := fmt.Sprintf("%s?code=%s&state=%s", redirectURI, code, state)
+	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
@@ -60,20 +138,55 @@ func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
-	var req api.AuthRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid request form", http.StatusBadRequest)
 		return
 	}
 
-	resp, err := h.authService.Login(r.Context(), &req)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
+	grantType := r.FormValue("grant_type")
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+
+	if grantType == "authorization_code" {
+		code := r.FormValue("code")
+		clientID := r.FormValue("client_id")
+		redirectURI := r.FormValue("redirect_uri")
+		codeVerifier := r.FormValue("code_verifier")
+
+		tokens, err := h.authService.ExchangeAuthorizationCode(r.Context(), code, clientID, redirectURI, codeVerifier)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(tokens)
+		return
+	}
+
+	if grantType == "password" || grantType == "" {
+		var req api.AuthRequest
+		if r.Header.Get("Content-Type") == "application/json" {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+				return
+			}
+		} else {
+			req.Username = r.FormValue("username")
+			req.Password = r.FormValue("password")
+		}
+
+		resp, err := h.authService.Login(r.Context(), &req)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	w.WriteHeader(http.StatusBadRequest)
+	json.NewEncoder(w).Encode(map[string]string{"error": "unsupported_grant_type"})
 }

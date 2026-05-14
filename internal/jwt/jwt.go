@@ -3,20 +3,27 @@ package jwt
 import (
 	"AuthServer/config"
 	"crypto/rsa"
+	"encoding/base64"
 	"fmt"
+	"math/big"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const (
-	ms = time.Millisecond
-	s  = time.Second
-	m  = time.Minute
-	h  = time.Hour
-	d  = time.Hour * 24
-)
+type JWK struct {
+	Kty string `json:"kty"`
+	Alg string `json:"alg"`
+	Use string `json:"use"`
+	Kid string `json:"kid"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+}
+
+type JWKS struct {
+	Keys []JWK `json:"keys"`
+}
 
 type JwtTokenProvider struct {
 	privateKey *rsa.PrivateKey
@@ -24,6 +31,34 @@ type JwtTokenProvider struct {
 	repo       TokenRepository
 	accessTTL  time.Duration
 	refreshTTL time.Duration
+}
+
+func (tp *JwtTokenProvider) GetPublicJWKS() JWKS {
+	n := base64.RawURLEncoding.EncodeToString(tp.publicKey.N.Bytes())
+	e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(tp.publicKey.E)).Bytes())
+
+	return JWKS{
+		Keys: []JWK{
+			{
+				Kty: "RSA",
+				Alg: "RS256",
+				Use: "sig",
+				Kid: "zenith-sso-main-key",
+				N:   n,
+				E:   e,
+			},
+		},
+	}
+}
+
+func (tp *JwtTokenProvider) GetClaims(tokenString string) (*TokenClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(t *jwt.Token) (interface{}, error) {
+		return tp.publicKey, nil
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	return token.Claims.(*TokenClaims), nil
 }
 
 func NewJwtTokenProvider(cfg *config.Config, repo TokenRepository, accessTTL, refreshTTL time.Duration) (*JwtTokenProvider, error) {
@@ -42,7 +77,7 @@ func NewJwtTokenProvider(cfg *config.Config, repo TokenRepository, accessTTL, re
 	}
 	publicKey, err := jwt.ParseRSAPublicKeyFromPEM(pubBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse public key: %w", err)
+		return nil, fmt.Errorf("failed to read public key: %w", err)
 	}
 
 	return &JwtTokenProvider{
@@ -56,17 +91,15 @@ func NewJwtTokenProvider(cfg *config.Config, repo TokenRepository, accessTTL, re
 
 func GetTimeUnit(unit string) time.Duration {
 	switch unit {
-	case "ms", "":
-		return ms
 	case "s":
-		return s
+		return time.Second
 	case "m":
-		return m
+		return time.Minute
 	case "h":
-		return h
+		return time.Hour
 	case "d":
-		return d
+		return time.Hour * 24
 	default:
-		return ms
+		return time.Minute
 	}
 }
