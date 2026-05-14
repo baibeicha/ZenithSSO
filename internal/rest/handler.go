@@ -49,8 +49,7 @@ func (h *AuthHandler) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 	codeChallenge := r.FormValue("code_challenge")
 	codeChallengeMethod := r.FormValue("code_challenge_method")
 
-	code, err := h.authService.GenerateAuthorizationCode(r.Context(), username, password,
-		clientID, redirectURI, codeChallenge, codeChallengeMethod)
+	code, err := h.authService.GenerateAuthorizationCode(r.Context(), username, password, clientID, redirectURI, codeChallenge, codeChallengeMethod)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -87,20 +86,55 @@ func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
-	var req api.AuthRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid request form", http.StatusBadRequest)
 		return
 	}
 
-	resp, err := h.authService.Login(r.Context(), &req)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
+	grantType := r.FormValue("grant_type")
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+
+	if grantType == "authorization_code" {
+		code := r.FormValue("code")
+		clientID := r.FormValue("client_id")
+		redirectURI := r.FormValue("redirect_uri")
+		codeVerifier := r.FormValue("code_verifier")
+
+		tokens, err := h.authService.ExchangeAuthorizationCode(r.Context(), code, clientID, redirectURI, codeVerifier)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(tokens)
+		return
+	}
+
+	if grantType == "password" || grantType == "" {
+		var req api.AuthRequest
+		if r.Header.Get("Content-Type") == "application/json" {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+				return
+			}
+		} else {
+			req.Username = r.FormValue("username")
+			req.Password = r.FormValue("password")
+		}
+
+		resp, err := h.authService.Login(r.Context(), &req)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	w.WriteHeader(http.StatusBadRequest)
+	json.NewEncoder(w).Encode(map[string]string{"error": "unsupported_grant_type"})
 }
