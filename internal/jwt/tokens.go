@@ -162,3 +162,17 @@ func (tp *JwtTokenProvider) DeleteToken(refreshToken string) error {
 
 	return nil
 }
+
+func (tp *JwtTokenProvider) GenerateSessionToken(user *db.User) (string, error) {
+	claims := TokenClaims{
+		Username: user.Username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    strconv.FormatUint(user.ID, 10),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(tp.privateKey)
+}

@@ -2,8 +2,8 @@ package rest
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"AuthServer/api"
@@ -15,10 +15,14 @@ import (
 
 type AuthHandler struct {
 	authService *internal.AuthServer
+	secured     bool
 }
 
-func NewAuthHandler(as *internal.AuthServer) *AuthHandler {
-	return &AuthHandler{authService: as}
+func NewAuthHandler(as *internal.AuthServer, secured bool) *AuthHandler {
+	return &AuthHandler{
+		authService: as,
+		secured:     secured,
+	}
 }
 
 func (h *AuthHandler) RegisterRoutes(r chi.Router) {
@@ -37,11 +41,18 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 
 	r.Post("/api/v1/register", h.RegisterHandler)
 	r.Post("/api/v1/token", h.TokenHandler)
-	r.Post("/api/v1/authorize", h.AuthorizeHandler)
+
+	r.Get("/api/v1/authorize", h.AuthorizeGETHandler)
+	r.Post("/api/v1/authorize", h.AuthorizePOSTHandler)
 }
 
 func (h *AuthHandler) DiscoveryHandler(w http.ResponseWriter, r *http.Request) {
-	issuer := "http://localhost:8080"
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	issuer := scheme + "://" + r.Host
+
 	data := map[string]interface{}{
 		"issuer":                                issuer,
 		"authorization_endpoint":                issuer + "/authorize.html",
@@ -87,28 +98,104 @@ func (h *AuthHandler) UserInfoHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *AuthHandler) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	if q.Get("response_type") != "code" {
+		http.Error(w, "unsupported_response_type: only 'code' is supported", http.StatusBadRequest)
+		return
+	}
+
+	cookie, err := r.Cookie("sso_session")
+	if err == nil && cookie.Value != "" {
+		_, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
+		if err == nil {
+			consentURL := &url.URL{Path: "/consent.html"}
+			consentURL.RawQuery = q.Encode()
+			http.Redirect(w, r, consentURL.String(), http.StatusFound)
+			return
+		}
+	}
+
+	loginURL := &url.URL{Path: "/authorize.html"}
+	loginURL.RawQuery = q.Encode()
+	http.Redirect(w, r, loginURL.String(), http.StatusFound)
+}
+
+func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid request form", http.StatusBadRequest)
+		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+
+	user, err := h.authService.ValidateUser(r.Context(), username, password)
+	if err != nil {
+		http.Redirect(w, r, "/authorize.html?error=invalid_credentials&"+r.URL.RawQuery, http.StatusFound)
+		return
+	}
+
+	sessionToken, err := h.authService.CreateSessionToken(user)
+	if err == nil {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "sso_session",
+			Value:    sessionToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   h.secured,
+			MaxAge:   86400,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	consentURL := &url.URL{Path: "/consent.html"}
+
+	params := url.Values{}
+	for k, v := range r.Form {
+		if k != "username" && k != "password" {
+			params[k] = v
+		}
+	}
+	consentURL.RawQuery = params.Encode()
+
+	http.Redirect(w, r, consentURL.String(), http.StatusFound)
+}
+
+func (h *AuthHandler) ConsentPOSTHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid request form", http.StatusBadRequest)
+		return
+	}
+
+	cookie, err := r.Cookie("sso_session")
+	if err != nil || cookie.Value == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
+	if err != nil {
+		http.Error(w, "invalid session", http.StatusUnauthorized)
+		return
+	}
+
 	clientID := r.FormValue("client_id")
 	redirectURI := r.FormValue("redirect_uri")
 	state := r.FormValue("state")
 	codeChallenge := r.FormValue("code_challenge")
 	codeChallengeMethod := r.FormValue("code_challenge_method")
+	scopes := r.FormValue("scope")
 
-	code, err := h.authService.GenerateAuthorizationCode(r.Context(), username, password, clientID, redirectURI, codeChallenge, codeChallengeMethod)
+	code, err := h.authService.GenerateAuthorizationCodeForUser(r.Context(), user.ID, clientID, redirectURI,
+		codeChallenge, codeChallengeMethod, scopes)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	redirectURL := fmt.Sprintf("%s?code=%s&state=%s", redirectURI, code, state)
-	http.Redirect(w, r, redirectURL, http.StatusFound)
+	http.Redirect(w, r, buildRedirectURL(redirectURI, code, state), http.StatusFound)
 }
 
 func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +233,8 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 	grantType := r.FormValue("grant_type")
 	w.Header().Set("Content-Type", "application/json")
 
-	if grantType == "authorization_code" {
+	switch grantType {
+	case "authorization_code":
 		code := r.FormValue("code")
 		clientID := r.FormValue("client_id")
 		redirectURI := r.FormValue("redirect_uri")
@@ -158,12 +246,25 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
-
 		json.NewEncoder(w).Encode(tokens)
-		return
-	}
 
-	if grantType == "password" || grantType == "" {
+	case "refresh_token":
+		refreshToken := r.FormValue("refresh_token")
+		if refreshToken == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "refresh_token is required"})
+			return
+		}
+
+		tokens, err := h.authService.RefreshTokens(r.Context(), refreshToken)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(tokens)
+
+	case "password", "":
 		var req api.AuthRequest
 		if r.Header.Get("Content-Type") == "application/json" {
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -182,11 +283,26 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
-
 		json.NewEncoder(w).Encode(resp)
-		return
+
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unsupported_grant_type"})
+	}
+}
+
+func buildRedirectURL(baseURI, code, state string) string {
+	u, err := url.Parse(baseURI)
+	if err != nil {
+		return baseURI
 	}
 
-	w.WriteHeader(http.StatusBadRequest)
-	json.NewEncoder(w).Encode(map[string]string{"error": "unsupported_grant_type"})
+	q := u.Query()
+	q.Set("code", code)
+	if state != "" {
+		q.Set("state", state)
+	}
+
+	u.RawQuery = q.Encode()
+	return u.String()
 }

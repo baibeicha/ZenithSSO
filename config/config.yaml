@@ -6,6 +6,7 @@ grpc:
     key_path: "./certs/server.key"
 
 server:
+  secured: true
   port: 8080
 
 datasource:

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Запрос доступа - ZenithSSO</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="sso-card">
+    <h2>Подтверждение доступа</h2>
+    <p class="subtitle">Приложение <strong id="app-name" style="color: #111;">[Client App]</strong> запрашивает доступ к
+        вашим данным.</p>
+
+    <div class="scopes-box">
+        <p style="margin-top: 0; font-weight: 500;">Разрешения:</p>
+        <ul id="scopes-list">
+        </ul>
+    </div>
+
+    <form action="/api/v1/consent" method="POST">
+        <div id="hidden_oauth_params"></div>
+
+        <button type="submit" class="btn">Разрешить доступ</button>
+        <button type="button" class="btn secondary" onclick="history.back()">Отмена</button>
+    </form>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const params = new URLSearchParams(window.location.search);
+
+        const clientName = params.get('client_id');
+        if (clientName) document.getElementById('app-name').innerText = clientName;
+
+        const scopesStr = params.get('scope') || '';
+        const scopesList = document.getElementById('scopes-list');
+
+        if (scopesStr) {
+            const scopes = scopesStr.split(' ');
+            scopes.forEach(s => {
+                if (s) {
+                    const li = document.createElement('li');
+                    li.innerText = s;
+                    scopesList.appendChild(li);
+                }
+            });
+        } else {
+            scopesList.innerHTML = "<li>Базовый профиль</li>";
+        }
+    });
+</script>
+</body>
+</html>

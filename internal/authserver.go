@@ -11,16 +11,19 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type TokenProvider interface {
 	GenerateTokens(user *db.User) (*jwt.Tokens, error)
 	GenerateIdToken(user *db.User, clientID string) (string, error)
+	GenerateSessionToken(user *db.User) (string, error)
 	VerifyToken(tokenString string) (bool, error)
 	RefreshToken(refreshToken string, user *db.User) (*jwt.Tokens, error)
 	DeleteToken(refreshToken string) error
@@ -45,6 +48,112 @@ func NewAuthServer(DB *db.DB, tokenProvider TokenProvider, log *slog.Logger) *Au
 		tokenProvider: tokenProvider,
 		log:           log,
 	}
+}
+
+func (s *AuthServer) ValidateUser(ctx context.Context, username, password string) (*db.User, error) {
+	user, err := s.repo.GetUserByUsername(ctx, username)
+	if user == nil || err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+
+	if !encoder.CheckPasswordHash(password, user.Password) {
+		return nil, errors.New("invalid credentials")
+	}
+
+	return user, nil
+}
+
+func (s *AuthServer) CreateSessionToken(user *db.User) (string, error) {
+	return s.tokenProvider.GenerateSessionToken(user)
+}
+
+func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userID uint64, clientID, redirectURI, codeChallenge, codeChallengeMethod, requestedScopes string) (string, error) {
+	client, err := s.clientsRepo.GetClientByID(ctx, clientID)
+	if err != nil {
+		return "", errors.New("invalid client_id")
+	}
+
+	var allowedURIs []string
+	if err := json.Unmarshal(client.RedirectURIs, &allowedURIs); err != nil {
+		return "", errors.New("invalid client configuration")
+	}
+
+	validURI := false
+	for _, uri := range allowedURIs {
+		if uri == redirectURI {
+			validURI = true
+			break
+		}
+	}
+	if !validURI {
+		return "", errors.New("invalid redirect_uri")
+	}
+
+	var allowedScopes []string
+	if err := json.Unmarshal(client.AllowedScopes, &allowedScopes); err != nil {
+		return "", errors.New("invalid client scope config")
+	}
+
+	reqScopesList := strings.Split(requestedScopes, " ")
+	for _, rs := range reqScopesList {
+		found := false
+		for _, as := range allowedScopes {
+			if rs == as {
+				found = true
+				break
+			}
+		}
+		if !found && rs != "" {
+			return "", fmt.Errorf("scope '%s' is not allowed for this client", rs)
+		}
+	}
+
+	code, err := utils.GenerateAuthCode()
+	if err != nil {
+		return "", err
+	}
+
+	authCode := &db.AuthCode{
+		Code:                code,
+		ClientID:            clientID,
+		UserID:              userID,
+		RedirectURI:         redirectURI,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		Scopes:              requestedScopes,
+		ExpiresAt:           time.Now().Add(5 * time.Minute),
+	}
+
+	err = s.authCodesRepo.SaveCode(ctx, authCode)
+	if err != nil {
+		return "", err
+	}
+
+	return code, nil
+}
+
+func (s *AuthServer) RefreshTokens(ctx context.Context, refreshToken string) (*jwt.Tokens, error) {
+	claims, err := s.tokenProvider.GetClaims(refreshToken)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+
+	userIDStr, err := claims.GetIssuer()
+	if err != nil || userIDStr == "" {
+		return nil, errors.New("invalid token claims")
+	}
+
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		return nil, errors.New("invalid user id in token")
+	}
+
+	user, err := s.repo.GetUserById(ctx, userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	return s.tokenProvider.RefreshToken(refreshToken, user)
 }
 
 func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, password, clientID, redirectURI, codeChallenge, codeChallengeMethod string) (string, error) {
