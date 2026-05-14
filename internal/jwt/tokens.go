@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"AuthServer/internal/db"
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 type TokenRepository interface {
 	InBlackList(tokenString string) bool
 	SaveToBlackList(tokenString, userID string) error
+	CleanExpiredTokens(ctx context.Context) error
 }
 
 type Tokens struct {

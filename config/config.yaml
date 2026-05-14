@@ -24,5 +24,8 @@ jwt:
     access: 1
     refresh: 15
     unit: m
+  cleanup:
+    interval: 5
+    unit: m
   private_key_path: "certs/private.pem"
   public_key_path: "certs/public.pem"

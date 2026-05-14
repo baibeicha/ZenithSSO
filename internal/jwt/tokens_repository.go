@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"AuthServer/internal/db"
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -30,10 +31,21 @@ func (r *TokensRepository) InBlackList(refreshToken string) bool {
 
 func (r *TokensRepository) SaveToBlackList(refreshToken string, userID string) error {
 	_, err := r.DB.Exec("INSERT INTO tokens (token, expires_at, user_id) VALUES ($1, $2, $3)",
-		refreshToken, time.Now().Add(r.refreshTTL).UnixMilli(), userID)
+		refreshToken, time.Now().Add(r.refreshTTL), userID)
 	if err != nil {
 		return fmt.Errorf("error saving tokens: %w", err)
 	}
+	return nil
+}
+
+func (r *TokensRepository) CleanExpiredTokens(ctx context.Context) error {
+	query := `DELETE FROM tokens WHERE expires_at < NOW()`
+
+	_, err := r.DB.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to clean expired tokens: %w", err)
+	}
+
 	return nil
 }
 
