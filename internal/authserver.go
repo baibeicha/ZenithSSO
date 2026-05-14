@@ -2,7 +2,7 @@ package internal
 
 import (
 	"AuthServer/api"
-	"AuthServer/configs"
+	"AuthServer/config"
 	"AuthServer/internal/db"
 	"AuthServer/internal/encoder"
 	"AuthServer/internal/jwt"
@@ -34,7 +34,7 @@ func NewAuthServer(DB *db.DB, tokenProvider TokenProvider, log *slog.Logger) *Au
 	}
 }
 
-func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *configs.Config) error {
+func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *config.Config) error {
 	rootWorkspace := "main"
 	if s.repo.WorkspaceExists(ctx, rootWorkspace) {
 		s.log.Debug("Root workspace exists, no need to register superuser")
