@@ -6,14 +6,18 @@ import (
 	"AuthServer/internal"
 	"AuthServer/internal/db"
 	"AuthServer/internal/jwt"
+	"AuthServer/internal/rest"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -50,7 +54,7 @@ func main() {
 	}
 
 	cleanupIntervalUnit := jwt.GetTimeUnit(cfg.GetString("jwt.cleanup.unit"))
-	cleanupInterval := cfg.GetDuration("jwt.cleanup.cleanup") * cleanupIntervalUnit
+	cleanupInterval := cfg.GetDuration("jwt.cleanup.interval") * cleanupIntervalUnit
 	go jwt.StartTokenCleanup(ctx, tokensRepository, cleanupInterval)
 
 	authService := internal.NewAuthServer(DB, tokenProvider, slog.Default())
@@ -61,6 +65,27 @@ func main() {
 		return
 	}
 	defer cansel()
+
+	r := chi.NewRouter()
+
+	authHandler := rest.NewAuthHandler(authService)
+	authHandler.RegisterRoutes(r)
+
+	fileServer := http.FileServer(http.Dir("./web"))
+	r.Handle("/*", http.StripPrefix("/", fileServer))
+
+	httpPort := cfg.GetInt("server.port")
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", httpPort),
+		Handler: r,
+	}
+
+	go func() {
+		slog.Info(fmt.Sprintf("Starting HTTP server on port %d", httpPort))
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("Failed to serve HTTP", "err", err)
+		}
+	}()
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
