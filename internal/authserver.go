@@ -6,11 +6,13 @@ import (
 	"AuthServer/internal/db"
 	"AuthServer/internal/encoder"
 	"AuthServer/internal/jwt"
+	"AuthServer/internal/utils"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 type TokenProvider interface {
@@ -22,6 +24,8 @@ type TokenProvider interface {
 type AuthServer struct {
 	api.UnimplementedAuthServiceServer
 	repo          *db.Repository
+	clientsRepo   *db.ClientsRepository
+	authCodesRepo *db.AuthCodesRepository
 	tokenProvider TokenProvider
 	log           *slog.Logger
 }
@@ -29,9 +33,50 @@ type AuthServer struct {
 func NewAuthServer(DB *db.DB, tokenProvider TokenProvider, log *slog.Logger) *AuthServer {
 	return &AuthServer{
 		repo:          db.NewRepository(DB),
+		clientsRepo:   db.NewClientsRepository(DB),
+		authCodesRepo: db.NewAuthCodesRepository(DB),
 		tokenProvider: tokenProvider,
 		log:           log,
 	}
+}
+
+func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, password, clientID, redirectURI,
+	codeChallenge, codeChallengeMethod string) (string, error) {
+	user, err := s.repo.GetUserByUsername(ctx, username)
+	if user == nil || err != nil {
+		return "", errors.New("invalid credentials")
+	}
+
+	if !encoder.CheckPasswordHash(password, user.Password) {
+		return "", errors.New("invalid credentials")
+	}
+
+	_, err = s.clientsRepo.GetClientByID(ctx, clientID)
+	if err != nil {
+		return "", errors.New("invalid client_id")
+	}
+
+	code, err := utils.GenerateAuthCode()
+	if err != nil {
+		return "", err
+	}
+
+	authCode := &db.AuthCode{
+		Code:                code,
+		ClientID:            clientID,
+		UserID:              user.ID,
+		RedirectURI:         redirectURI,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		ExpiresAt:           time.Now().Add(5 * time.Minute),
+	}
+
+	err = s.authCodesRepo.SaveCode(ctx, authCode)
+	if err != nil {
+		return "", err
+	}
+
+	return code, nil
 }
 
 func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *config.Config) error {
