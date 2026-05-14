@@ -21,8 +21,8 @@ import (
 )
 
 type TokenProvider interface {
-	GenerateTokens(user *db.User) (*jwt.Tokens, error)
-	GenerateIdToken(user *db.User, clientID string) (string, error)
+	GenerateTokens(user *db.User, scopes string) (*jwt.Tokens, error)
+	GenerateIdToken(user *db.User, clientID string, scopes string) (string, error)
 	GenerateSessionToken(user *db.User) (string, error)
 	VerifyToken(tokenString string) (bool, error)
 	RefreshToken(refreshToken string, user *db.User) (*jwt.Tokens, error)
@@ -34,8 +34,8 @@ type TokenProvider interface {
 type AuthServer struct {
 	api.UnimplementedAuthServiceServer
 	repo          *db.Repository
-	clientsRepo   *db.ClientsRepository
-	authCodesRepo *db.AuthCodesRepository
+	ClientsRepo   *db.ClientsRepository
+	AuthCodesRepo *db.AuthCodesRepository
 	tokenProvider TokenProvider
 	log           *slog.Logger
 }
@@ -43,8 +43,8 @@ type AuthServer struct {
 func NewAuthServer(DB *db.DB, tokenProvider TokenProvider, log *slog.Logger) *AuthServer {
 	return &AuthServer{
 		repo:          db.NewRepository(DB),
-		clientsRepo:   db.NewClientsRepository(DB),
-		authCodesRepo: db.NewAuthCodesRepository(DB),
+		ClientsRepo:   db.NewClientsRepository(DB),
+		AuthCodesRepo: db.NewAuthCodesRepository(DB),
 		tokenProvider: tokenProvider,
 		log:           log,
 	}
@@ -68,7 +68,7 @@ func (s *AuthServer) CreateSessionToken(user *db.User) (string, error) {
 }
 
 func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userID uint64, clientID, redirectURI, codeChallenge, codeChallengeMethod, requestedScopes string) (string, error) {
-	client, err := s.clientsRepo.GetClientByID(ctx, clientID)
+	client, err := s.ClientsRepo.GetClientByID(ctx, clientID)
 	if err != nil {
 		return "", errors.New("invalid client_id")
 	}
@@ -124,7 +124,7 @@ func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userI
 		ExpiresAt:           time.Now().Add(5 * time.Minute),
 	}
 
-	err = s.authCodesRepo.SaveCode(ctx, authCode)
+	err = s.AuthCodesRepo.SaveCode(ctx, authCode)
 	if err != nil {
 		return "", err
 	}
@@ -166,7 +166,7 @@ func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, pa
 		return "", errors.New("invalid credentials")
 	}
 
-	_, err = s.clientsRepo.GetClientByID(ctx, clientID)
+	_, err = s.ClientsRepo.GetClientByID(ctx, clientID)
 	if err != nil {
 		return "", errors.New("invalid client_id")
 	}
@@ -186,7 +186,7 @@ func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, pa
 		ExpiresAt:           time.Now().Add(5 * time.Minute),
 	}
 
-	err = s.authCodesRepo.SaveCode(ctx, authCode)
+	err = s.AuthCodesRepo.SaveCode(ctx, authCode)
 	if err != nil {
 		return "", err
 	}
@@ -195,7 +195,7 @@ func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, pa
 }
 
 func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, clientID, redirectURI, codeVerifier string) (*jwt.Tokens, error) {
-	authCode, err := s.authCodesRepo.GetAndDeleteCode(ctx, code)
+	authCode, err := s.AuthCodesRepo.GetAndDeleteCode(ctx, code)
 	if err != nil {
 		return nil, errors.New("invalid or expired authorization code")
 	}
@@ -225,12 +225,12 @@ func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, client
 		return nil, errors.New("user not found")
 	}
 
-	tokens, err := s.tokenProvider.GenerateTokens(user)
+	tokens, err := s.tokenProvider.GenerateTokens(user, authCode.Scopes)
 	if err != nil {
 		return nil, err
 	}
 
-	idToken, err := s.tokenProvider.GenerateIdToken(user, clientID)
+	idToken, err := s.tokenProvider.GenerateIdToken(user, clientID, authCode.Scopes)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (s *AuthServer) Login(ctx context.Context, request *api.AuthRequest) (*api.
 		return nil, fmt.Errorf("invalid password")
 	}
 
-	tokens, err := s.tokenProvider.GenerateTokens(user)
+	tokens, err := s.tokenProvider.GenerateTokens(user, "")
 	if err != nil {
 		return nil, err
 	}

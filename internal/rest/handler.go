@@ -41,6 +41,7 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 
 	r.Post("/api/v1/register", h.RegisterHandler)
 	r.Post("/api/v1/token", h.TokenHandler)
+	r.Post("/api/v1/consent", h.ConsentPOSTHandler)
 
 	r.Get("/api/v1/authorize", h.AuthorizeGETHandler)
 	r.Post("/api/v1/authorize", h.AuthorizePOSTHandler)
@@ -103,6 +104,14 @@ func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request
 
 	if q.Get("response_type") != "code" {
 		http.Error(w, "unsupported_response_type: only 'code' is supported", http.StatusBadRequest)
+		return
+	}
+
+	clientID := q.Get("client_id")
+
+	_, err := h.authService.ClientsRepo.GetClientByID(r.Context(), clientID)
+	if err != nil {
+		http.Error(w, "invalid_client: application not found", http.StatusBadRequest)
 		return
 	}
 
