@@ -51,6 +51,10 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 			u.username, 
 			u.email, 
 			u.password,
+			u.first_name,
+			u.last_name,
+			u.avatar_url,
+			u.locale,
 			COALESCE(
 				jsonb_agg(
 					jsonb_build_object(
@@ -80,6 +84,10 @@ func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*U
 			u.username, 
 			u.email, 
 			u.password,
+			u.first_name,
+			u.last_name,
+			u.avatar_url,
+			u.locale,
 			COALESCE(
 				jsonb_agg(
 					jsonb_build_object(
@@ -158,6 +166,10 @@ func (r *Repository) GetUserById(ctx context.Context, userID uint64) (*User, err
 			u.username, 
 			u.email, 
 			u.password,
+			u.first_name,
+			u.last_name,
+			u.avatar_url,
+			u.locale,
 			COALESCE(
 				jsonb_agg(
 					jsonb_build_object(

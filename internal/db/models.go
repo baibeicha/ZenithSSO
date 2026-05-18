@@ -8,11 +8,15 @@ import (
 )
 
 type User struct {
-	ID       uint64     `db:"id"`
-	Username string     `db:"username"`
-	Email    string     `db:"email"`
-	Password string     `db:"password"`
-	Scopes   ScopesList `db:"scopes"`
+	ID        uint64     `db:"id"`
+	Username  string     `db:"username"`
+	Email     string     `db:"email"`
+	Password  string     `db:"password"`
+	FirstName *string    `db:"first_name"`
+	LastName  *string    `db:"last_name"`
+	AvatarURL *string    `db:"avatar_url"`
+	Locale    *string    `db:"locale"`
+	Scopes    ScopesList `db:"scopes"`
 }
 
 type Scope struct {
