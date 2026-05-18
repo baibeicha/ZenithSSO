@@ -87,5 +87,6 @@ type AuthCode struct {
 	CodeChallenge       string    `db:"code_challenge"`
 	CodeChallengeMethod string    `db:"code_challenge_method"`
 	Scopes              string    `db:"scopes"`
+	Nonce               string    `db:"nonce"`
 	ExpiresAt           time.Time `db:"expires_at"`
 }

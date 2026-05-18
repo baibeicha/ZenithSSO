@@ -11,6 +11,11 @@ type Config struct {
 	*viper.Viper
 	filename string
 	GRPC     GRPCConfig `mapstructure:"grpc"`
+	SSO      SSOConfig  `mapstructure:"sso"`
+}
+
+type SSOConfig struct {
+	Issuer string `mapstructure:"issuer"`
 }
 
 type GRPCConfig struct {
@@ -47,6 +52,10 @@ func MustLoad(filename string) *Config {
 
 	if err := v.Unmarshal(&cfg); err != nil {
 		log.Fatalf("error parsing config into struct: %v", err)
+	}
+
+	if cfg.SSO.Issuer == "" {
+		cfg.SSO.Issuer = "http://localhost:8080" // default
 	}
 
 	cfg.Viper = v

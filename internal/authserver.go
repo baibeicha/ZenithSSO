@@ -21,11 +21,11 @@ import (
 )
 
 type TokenProvider interface {
-	GenerateTokens(user *db.User, scopes string) (*jwt.Tokens, error)
-	GenerateIdToken(user *db.User, clientID string, scopes string) (string, error)
+	GenerateTokens(user *db.User, clientID string, scopes string) (*jwt.Tokens, error)
+	GenerateIdToken(user *db.User, clientID string, scopes string, nonce string, issuer string) (string, error)
 	GenerateSessionToken(user *db.User) (string, error)
 	VerifyToken(tokenString string) (bool, error)
-	RefreshToken(refreshToken string, user *db.User) (*jwt.Tokens, error)
+	RefreshToken(refreshToken string, user *db.User, clientID string) (*jwt.Tokens, error)
 	DeleteToken(refreshToken string) error
 	GetPublicJWKS() jwt.JWKS
 	GetClaims(tokenString string) (*jwt.TokenClaims, error)
@@ -38,15 +38,17 @@ type AuthServer struct {
 	AuthCodesRepo *db.AuthCodesRepository
 	tokenProvider TokenProvider
 	log           *slog.Logger
+	issuer        string
 }
 
-func NewAuthServer(DB *db.DB, tokenProvider TokenProvider, log *slog.Logger) *AuthServer {
+func NewAuthServer(DB *db.DB, tokenProvider TokenProvider, log *slog.Logger, issuer string) *AuthServer {
 	return &AuthServer{
 		repo:          db.NewRepository(DB),
 		ClientsRepo:   db.NewClientsRepository(DB),
 		AuthCodesRepo: db.NewAuthCodesRepository(DB),
 		tokenProvider: tokenProvider,
 		log:           log,
+		issuer:        issuer,
 	}
 }
 
@@ -67,7 +69,7 @@ func (s *AuthServer) CreateSessionToken(user *db.User) (string, error) {
 	return s.tokenProvider.GenerateSessionToken(user)
 }
 
-func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userID uint64, clientID, redirectURI, codeChallenge, codeChallengeMethod, requestedScopes string) (string, error) {
+func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userID uint64, clientID, redirectURI, codeChallenge, codeChallengeMethod, requestedScopes, nonce string) (string, error) {
 	client, err := s.ClientsRepo.GetClientByID(ctx, clientID)
 	if err != nil {
 		return "", errors.New("invalid client_id")
@@ -96,6 +98,9 @@ func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userI
 
 	reqScopesList := strings.Split(requestedScopes, " ")
 	for _, rs := range reqScopesList {
+		if rs == "" {
+			continue
+		}
 		found := false
 		for _, as := range allowedScopes {
 			if rs == as {
@@ -121,6 +126,7 @@ func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userI
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 		Scopes:              requestedScopes,
+		Nonce:               nonce,
 		ExpiresAt:           time.Now().Add(5 * time.Minute),
 	}
 
@@ -132,7 +138,7 @@ func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userI
 	return code, nil
 }
 
-func (s *AuthServer) RefreshTokens(ctx context.Context, refreshToken string) (*jwt.Tokens, error) {
+func (s *AuthServer) RefreshTokens(ctx context.Context, refreshToken string, clientID string) (*jwt.Tokens, error) {
 	claims, err := s.tokenProvider.GetClaims(refreshToken)
 	if err != nil {
 		return nil, errors.New("invalid refresh token")
@@ -153,7 +159,7 @@ func (s *AuthServer) RefreshTokens(ctx context.Context, refreshToken string) (*j
 		return nil, errors.New("user not found")
 	}
 
-	return s.tokenProvider.RefreshToken(refreshToken, user)
+	return s.tokenProvider.RefreshToken(refreshToken, user, clientID)
 }
 
 func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, password, clientID, redirectURI, codeChallenge, codeChallengeMethod string) (string, error) {
@@ -212,9 +218,16 @@ func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, client
 		return nil, errors.New("authorization code expired")
 	}
 
-	hasher := sha256.New()
-	hasher.Write([]byte(codeVerifier))
-	expectedChallenge := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
+	var expectedChallenge string
+	if authCode.CodeChallengeMethod == "S256" {
+		hasher := sha256.New()
+		hasher.Write([]byte(codeVerifier))
+		expectedChallenge = base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
+	} else if authCode.CodeChallengeMethod == "plain" {
+		expectedChallenge = codeVerifier
+	} else {
+		return nil, errors.New("unsupported code_challenge_method")
+	}
 
 	if authCode.CodeChallenge != expectedChallenge {
 		return nil, errors.New("invalid code_verifier")
@@ -225,17 +238,26 @@ func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, client
 		return nil, errors.New("user not found")
 	}
 
-	tokens, err := s.tokenProvider.GenerateTokens(user, authCode.Scopes)
+	tokens, err := s.tokenProvider.GenerateTokens(user, clientID, authCode.Scopes)
 	if err != nil {
 		return nil, err
 	}
 
-	idToken, err := s.tokenProvider.GenerateIdToken(user, clientID, authCode.Scopes)
-	if err != nil {
-		return nil, err
+	hasOpenid := false
+	for _, scope := range strings.Split(authCode.Scopes, " ") {
+		if scope == "openid" {
+			hasOpenid = true
+			break
+		}
 	}
 
-	tokens.IdToken = idToken
+	if hasOpenid {
+		idToken, err := s.tokenProvider.GenerateIdToken(user, clientID, authCode.Scopes, authCode.Nonce, s.issuer)
+		if err != nil {
+			return nil, err
+		}
+		tokens.IdToken = idToken
+	}
 
 	return tokens, nil
 }
@@ -340,7 +362,7 @@ func (s *AuthServer) Login(ctx context.Context, request *api.AuthRequest) (*api.
 		return nil, fmt.Errorf("invalid password")
 	}
 
-	tokens, err := s.tokenProvider.GenerateTokens(user, "")
+	tokens, err := s.tokenProvider.GenerateTokens(user, "", "")
 	if err != nil {
 		return nil, err
 	}

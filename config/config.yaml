@@ -5,6 +5,9 @@ grpc:
     cert_path: "./certs/server.crt"
     key_path: "./certs/server.key"
 
+sso:
+  issuer: "http://localhost:8080"
+
 server:
   secured: true
   port: 8080

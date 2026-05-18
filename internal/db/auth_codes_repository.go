@@ -14,8 +14,8 @@ func NewAuthCodesRepository(db *DB) *AuthCodesRepository {
 
 func (r *AuthCodesRepository) SaveCode(ctx context.Context, code *AuthCode) error {
 	query := `
-		INSERT INTO auth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires_at)
-		VALUES (:code, :client_id, :user_id, :redirect_uri, :code_challenge, :code_challenge_method, :expires_at)
+		INSERT INTO auth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, scopes, nonce, expires_at)
+		VALUES (:code, :client_id, :user_id, :redirect_uri, :code_challenge, :code_challenge_method, :scopes, :nonce, :expires_at)
 	`
 	_, err := r.db.NamedExecContext(ctx, query, code)
 	return err
@@ -26,7 +26,7 @@ func (r *AuthCodesRepository) GetAndDeleteCode(ctx context.Context, code string)
 	query := `
 		DELETE FROM auth_codes 
 		WHERE code = $1 
-		RETURNING code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires_at
+		RETURNING code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, scopes, nonce, expires_at
 	`
 	err := r.db.GetContext(ctx, &authCode, query, code)
 	if err != nil {
