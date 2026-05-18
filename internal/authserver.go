@@ -21,11 +21,11 @@ import (
 )
 
 type TokenProvider interface {
-	GenerateTokens(user *db.User, clientID string, scopes string) (*jwt.Tokens, error)
+	GenerateTokens(user *db.User, clientID string, scopes string, ipAddress string, userAgent string) (*jwt.Tokens, error)
 	GenerateIdToken(user *db.User, clientID string, scopes string, nonce string, issuer string) (string, error)
 	GenerateSessionToken(user *db.User) (string, error)
 	VerifyToken(tokenString string) (bool, error)
-	RefreshToken(refreshToken string, user *db.User, clientID string) (*jwt.Tokens, error)
+	RefreshToken(refreshToken string, user *db.User, clientID string, ipAddress string, userAgent string) (*jwt.Tokens, error)
 	DeleteToken(refreshToken string) error
 	GetPublicJWKS() jwt.JWKS
 	GetClaims(tokenString string) (*jwt.TokenClaims, error)
@@ -138,7 +138,7 @@ func (s *AuthServer) GenerateAuthorizationCodeForUser(ctx context.Context, userI
 	return code, nil
 }
 
-func (s *AuthServer) RefreshTokens(ctx context.Context, refreshToken string, clientID string) (*jwt.Tokens, error) {
+func (s *AuthServer) RefreshTokens(ctx context.Context, refreshToken string, clientID string, ipAddress string, userAgent string) (*jwt.Tokens, error) {
 	claims, err := s.tokenProvider.GetClaims(refreshToken)
 	if err != nil {
 		return nil, errors.New("invalid refresh token")
@@ -159,7 +159,7 @@ func (s *AuthServer) RefreshTokens(ctx context.Context, refreshToken string, cli
 		return nil, errors.New("user not found")
 	}
 
-	return s.tokenProvider.RefreshToken(refreshToken, user, clientID)
+	return s.tokenProvider.RefreshToken(refreshToken, user, clientID, ipAddress, userAgent)
 }
 
 func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, password, clientID, redirectURI, codeChallenge, codeChallengeMethod string) (string, error) {
@@ -200,7 +200,7 @@ func (s *AuthServer) GenerateAuthorizationCode(ctx context.Context, username, pa
 	return code, nil
 }
 
-func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, clientID, redirectURI, codeVerifier string) (*jwt.Tokens, error) {
+func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, clientID, redirectURI, codeVerifier string, ipAddress string, userAgent string) (*jwt.Tokens, error) {
 	authCode, err := s.AuthCodesRepo.GetAndDeleteCode(ctx, code)
 	if err != nil {
 		return nil, errors.New("invalid or expired authorization code")
@@ -238,7 +238,7 @@ func (s *AuthServer) ExchangeAuthorizationCode(ctx context.Context, code, client
 		return nil, errors.New("user not found")
 	}
 
-	tokens, err := s.tokenProvider.GenerateTokens(user, clientID, authCode.Scopes)
+	tokens, err := s.tokenProvider.GenerateTokens(user, clientID, authCode.Scopes, ipAddress, userAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +362,7 @@ func (s *AuthServer) Login(ctx context.Context, request *api.AuthRequest) (*api.
 		return nil, fmt.Errorf("invalid password")
 	}
 
-	tokens, err := s.tokenProvider.GenerateTokens(user, "", "")
+	tokens, err := s.tokenProvider.GenerateTokens(user, "", "", "", "")
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,13 @@
+{
+    "login_title": "Login to your account",
+    "username": "Username",
+    "password": "Password",
+    "login_button": "Log in",
+    "register_title": "Create an account",
+    "email": "Email",
+    "register_button": "Sign up",
+    "consent_title": "Authorize application",
+    "consent_message": "The application is requesting access to your account.",
+    "authorize_button": "Authorize",
+    "deny_button": "Deny"
+}

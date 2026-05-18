@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,11 +24,11 @@ type AuthHandler struct {
 	templates   *template.Template
 }
 
-func NewAuthHandler(as *internal.AuthServer, secured bool, issuer string) *AuthHandler {
-	tmpl, _ := template.ParseGlob("web/templates/*.html")
-	if tmpl == nil {
-		tmpl = template.New("fallback")
-	}
+func NewAuthHandler(as *internal.AuthServer, secured bool, issuer string, customDir string) *AuthHandler {
+	uiFS := GetFS(customDir)
+	tmpl := ParseTemplates(uiFS)
+
+	LoadLocales()
 
 	return &AuthHandler{
 		authService: as,
@@ -37,7 +38,7 @@ func NewAuthHandler(as *internal.AuthServer, secured bool, issuer string) *AuthH
 	}
 }
 
-func (h *AuthHandler) RegisterRoutes(r chi.Router) {
+func (h *AuthHandler) RegisterRoutes(r chi.Router, customDir string) {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"*"},
@@ -60,10 +61,19 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/v1/consent", h.ConsentGETHandler)
 
 	r.Get("/api/v1/register", h.RegisterGETHandler)
+
+	uiFS := GetFS(customDir)
+	staticFS, err := fs.Sub(uiFS, "static")
+	if err == nil {
+		r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	}
 }
 
 func (h *AuthHandler) RegisterGETHandler(w http.ResponseWriter, r *http.Request) {
-	err := h.templates.ExecuteTemplate(w, "register.html", nil)
+	data := map[string]interface{}{
+		"T": Translate(r),
+	}
+	err := h.templates.ExecuteTemplate(w, "register.html", data)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
@@ -109,12 +119,28 @@ func (h *AuthHandler) UserInfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+
+	claims := map[string]interface{}{
 		"sub":      user.ID,
 		"name":     user.Username,
 		"email":    user.Email,
 		"username": user.Username,
-	})
+	}
+
+	if user.FirstName != nil {
+		claims["given_name"] = *user.FirstName
+	}
+	if user.LastName != nil {
+		claims["family_name"] = *user.LastName
+	}
+	if user.AvatarURL != nil {
+		claims["picture"] = *user.AvatarURL
+	}
+	if user.Locale != nil {
+		claims["locale"] = *user.Locale
+	}
+
+	json.NewEncoder(w).Encode(claims)
 }
 
 func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +172,7 @@ func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request
 
 	data := map[string]interface{}{
 		"Error": q.Get("error"),
+		"T":     Translate(r),
 	}
 
 	err = h.templates.ExecuteTemplate(w, "authorize.html", data)
@@ -212,7 +239,10 @@ func (h *AuthHandler) ConsentGETHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = h.templates.ExecuteTemplate(w, "consent.html", nil)
+	data := map[string]interface{}{
+		"T": Translate(r),
+	}
+	err = h.templates.ExecuteTemplate(w, "consent.html", data)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
@@ -329,7 +359,10 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 		redirectURI := r.FormValue("redirect_uri")
 		codeVerifier := r.FormValue("code_verifier")
 
-		tokens, err := h.authService.ExchangeAuthorizationCode(r.Context(), code, clientID, redirectURI, codeVerifier)
+		ipAddress := r.RemoteAddr
+		userAgent := r.UserAgent()
+
+		tokens, err := h.authService.ExchangeAuthorizationCode(r.Context(), code, clientID, redirectURI, codeVerifier, ipAddress, userAgent)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -352,7 +385,10 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		tokens, err := h.authService.RefreshTokens(r.Context(), refreshToken, clientID)
+		ipAddress := r.RemoteAddr
+		userAgent := r.UserAgent()
+
+		tokens, err := h.authService.RefreshTokens(r.Context(), refreshToken, clientID, ipAddress, userAgent)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
