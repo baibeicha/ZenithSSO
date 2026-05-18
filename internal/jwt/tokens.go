@@ -31,7 +31,7 @@ type TokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (tp *JwtTokenProvider) GenerateAccess(user *db.User, allowedScopes string) (string, error) {
+func (tp *JwtTokenProvider) GenerateAccess(user *db.User, clientID, allowedScopes string) (string, error) {
 	var scopes string
 	if allowedScopes != "" {
 		scopes = user.Scopes.StringFromAllowed(allowedScopes)
@@ -44,6 +44,7 @@ func (tp *JwtTokenProvider) GenerateAccess(user *db.User, allowedScopes string) 
 		Scopes:   scopes,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    strconv.FormatUint(user.ID, 10),
+			Audience:  jwt.ClaimStrings{clientID},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -53,12 +54,13 @@ func (tp *JwtTokenProvider) GenerateAccess(user *db.User, allowedScopes string) 
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateRefresh(user *db.User, allowedScopes string) (string, error) {
+func (tp *JwtTokenProvider) GenerateRefresh(user *db.User, clientID, allowedScopes string) (string, error) {
 	claims := TokenClaims{
 		Username:      user.Username,
 		AllowedScopes: allowedScopes,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    strconv.FormatUint(user.ID, 10),
+			Audience:  jwt.ClaimStrings{clientID},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -68,14 +70,18 @@ func (tp *JwtTokenProvider) GenerateRefresh(user *db.User, allowedScopes string)
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateIdToken(user *db.User, clientID string, scopes string) (string, error) {
+func (tp *JwtTokenProvider) GenerateIdToken(user *db.User, clientID string, scopes string, nonce string, issuer string) (string, error) {
 	claims := jwt.MapClaims{
-		"iss":  "ZenithSSO",
+		"iss":  issuer,
 		"sub":  strconv.FormatUint(user.ID, 10),
 		"aud":  clientID,
 		"exp":  time.Now().Add(tp.accessTTL).Unix(),
 		"iat":  time.Now().Unix(),
 		"name": user.Username,
+	}
+
+	if nonce != "" {
+		claims["nonce"] = nonce
 	}
 
 	if strings.Contains(scopes, "email") {
@@ -86,13 +92,13 @@ func (tp *JwtTokenProvider) GenerateIdToken(user *db.User, clientID string, scop
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateTokens(user *db.User, scopes string) (*Tokens, error) {
-	accessToken, err := tp.GenerateAccess(user, scopes)
+func (tp *JwtTokenProvider) GenerateTokens(user *db.User, clientID, scopes string) (*Tokens, error) {
+	accessToken, err := tp.GenerateAccess(user, clientID, scopes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := tp.GenerateRefresh(user, scopes)
+	refreshToken, err := tp.GenerateRefresh(user, clientID, scopes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
@@ -126,7 +132,7 @@ func (tp *JwtTokenProvider) VerifyToken(tokenString string) (bool, error) {
 	return token.Valid, nil
 }
 
-func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *db.User) (*Tokens, error) {
+func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *db.User, clientID string) (*Tokens, error) {
 	isValid, err := tp.VerifyToken(refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
@@ -147,7 +153,12 @@ func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *db.User) (*T
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
 	}
 
-	accessToken, err := tp.GenerateAccess(user, claims.AllowedScopes)
+	// Verify the refresh token was issued to this client
+	if len(claims.Audience) == 0 || claims.Audience[0] != clientID {
+		return nil, fmt.Errorf("refresh token was not issued to this client")
+	}
+
+	accessToken, err := tp.GenerateAccess(user, clientID, claims.AllowedScopes)
 	if err != nil {
 		return nil, err
 	}

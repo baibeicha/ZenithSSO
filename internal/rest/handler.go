@@ -2,12 +2,15 @@ package rest
 
 import (
 	"encoding/json"
+	"errors"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"AuthServer/api"
 	"AuthServer/internal"
+	"AuthServer/internal/encoder"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -16,12 +19,21 @@ import (
 type AuthHandler struct {
 	authService *internal.AuthServer
 	secured     bool
+	issuer      string
+	templates   *template.Template
 }
 
-func NewAuthHandler(as *internal.AuthServer, secured bool) *AuthHandler {
+func NewAuthHandler(as *internal.AuthServer, secured bool, issuer string) *AuthHandler {
+	tmpl, _ := template.ParseGlob("web/templates/*.html")
+	if tmpl == nil {
+		tmpl = template.New("fallback")
+	}
+
 	return &AuthHandler{
 		authService: as,
 		secured:     secured,
+		issuer:      issuer,
+		templates:   tmpl,
 	}
 }
 
@@ -45,18 +57,24 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 
 	r.Get("/api/v1/authorize", h.AuthorizeGETHandler)
 	r.Post("/api/v1/authorize", h.AuthorizePOSTHandler)
+	r.Get("/api/v1/consent", h.ConsentGETHandler)
+
+	r.Get("/api/v1/register", h.RegisterGETHandler)
+}
+
+func (h *AuthHandler) RegisterGETHandler(w http.ResponseWriter, r *http.Request) {
+	err := h.templates.ExecuteTemplate(w, "register.html", nil)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func (h *AuthHandler) DiscoveryHandler(w http.ResponseWriter, r *http.Request) {
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	issuer := scheme + "://" + r.Host
+	issuer := h.issuer
 
 	data := map[string]interface{}{
 		"issuer":                                issuer,
-		"authorization_endpoint":                issuer + "/authorize.html",
+		"authorization_endpoint":                issuer + "/api/v1/authorize",
 		"token_endpoint":                        issuer + "/api/v1/token",
 		"userinfo_endpoint":                     issuer + "/api/v1/userinfo",
 		"jwks_uri":                              issuer + "/api/v1/jwks",
@@ -119,16 +137,21 @@ func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request
 	if err == nil && cookie.Value != "" {
 		_, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
 		if err == nil {
-			consentURL := &url.URL{Path: "/consent.html"}
+			consentURL := &url.URL{Path: "/api/v1/consent"}
 			consentURL.RawQuery = q.Encode()
 			http.Redirect(w, r, consentURL.String(), http.StatusFound)
 			return
 		}
 	}
 
-	loginURL := &url.URL{Path: "/authorize.html"}
-	loginURL.RawQuery = q.Encode()
-	http.Redirect(w, r, loginURL.String(), http.StatusFound)
+	data := map[string]interface{}{
+		"Error": q.Get("error"),
+	}
+
+	err = h.templates.ExecuteTemplate(w, "authorize.html", data)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +165,11 @@ func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Reques
 
 	user, err := h.authService.ValidateUser(r.Context(), username, password)
 	if err != nil {
-		http.Redirect(w, r, "/authorize.html?error=invalid_credentials&"+r.URL.RawQuery, http.StatusFound)
+		loginURL := &url.URL{Path: "/api/v1/authorize"}
+		q := r.URL.Query()
+		q.Set("error", "invalid_credentials")
+		loginURL.RawQuery = q.Encode()
+		http.Redirect(w, r, loginURL.String(), http.StatusFound)
 		return
 	}
 
@@ -159,7 +186,7 @@ func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Reques
 		})
 	}
 
-	consentURL := &url.URL{Path: "/consent.html"}
+	consentURL := &url.URL{Path: "/api/v1/consent"}
 
 	params := url.Values{}
 	for k, v := range r.Form {
@@ -170,6 +197,25 @@ func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Reques
 	consentURL.RawQuery = params.Encode()
 
 	http.Redirect(w, r, consentURL.String(), http.StatusFound)
+}
+
+func (h *AuthHandler) ConsentGETHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sso_session")
+	if err != nil || cookie.Value == "" {
+		http.Redirect(w, r, "/api/v1/authorize?"+r.URL.RawQuery, http.StatusFound)
+		return
+	}
+
+	_, err = h.authService.GetUserInfo(r.Context(), cookie.Value)
+	if err != nil {
+		http.Redirect(w, r, "/api/v1/authorize?"+r.URL.RawQuery, http.StatusFound)
+		return
+	}
+
+	err = h.templates.ExecuteTemplate(w, "consent.html", nil)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func (h *AuthHandler) ConsentPOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -196,9 +242,10 @@ func (h *AuthHandler) ConsentPOSTHandler(w http.ResponseWriter, r *http.Request)
 	codeChallenge := r.FormValue("code_challenge")
 	codeChallengeMethod := r.FormValue("code_challenge_method")
 	scopes := r.FormValue("scope")
+	nonce := r.FormValue("nonce")
 
 	code, err := h.authService.GenerateAuthorizationCodeForUser(r.Context(), user.ID, clientID, redirectURI,
-		codeChallenge, codeChallengeMethod, scopes)
+		codeChallenge, codeChallengeMethod, scopes, nonce)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -235,17 +282,50 @@ func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid request form", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
 		return
 	}
 
 	grantType := r.FormValue("grant_type")
 	w.Header().Set("Content-Type", "application/json")
 
+	// Helper for Client Authentication
+	authenticateClient := func() (string, error) {
+		clientID, clientSecret, ok := r.BasicAuth()
+		if !ok {
+			clientID = r.FormValue("client_id")
+			clientSecret = r.FormValue("client_secret")
+		}
+
+		if clientID == "" || clientSecret == "" {
+			return "", errors.New("invalid_client")
+		}
+
+		client, err := h.authService.ClientsRepo.GetClientByID(r.Context(), clientID)
+		if err != nil {
+			return "", errors.New("invalid_client")
+		}
+
+		// Check client secret using the logic
+		if !encoder.CheckPasswordHash(clientSecret, client.ClientSecretHash) {
+			return "", errors.New("invalid_client")
+		}
+
+		return clientID, nil
+	}
+
 	switch grantType {
 	case "authorization_code":
+		clientID, err := authenticateClient()
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid_client"})
+			return
+		}
+
 		code := r.FormValue("code")
-		clientID := r.FormValue("client_id")
 		redirectURI := r.FormValue("redirect_uri")
 		codeVerifier := r.FormValue("code_verifier")
 
@@ -258,14 +338,21 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(tokens)
 
 	case "refresh_token":
-		refreshToken := r.FormValue("refresh_token")
-		if refreshToken == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "refresh_token is required"})
+		clientID, err := authenticateClient()
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid_client"})
 			return
 		}
 
-		tokens, err := h.authService.RefreshTokens(r.Context(), refreshToken)
+		refreshToken := r.FormValue("refresh_token")
+		if refreshToken == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+			return
+		}
+
+		tokens, err := h.authService.RefreshTokens(r.Context(), refreshToken, clientID)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
