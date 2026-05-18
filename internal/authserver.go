@@ -319,9 +319,10 @@ func (s *AuthServer) SetUpSuperuser(ctx context.Context, cfg *config.Config) err
 func (s *AuthServer) Register(ctx context.Context, request *api.RegisterRequest) (*api.Status, error) {
 	if u, err := s.repo.GetUserByUsername(ctx, request.GetUsername()); u != nil || err != nil {
 		if u != nil {
+			msg := fmt.Sprintf("user '%s' already exists", request.GetUsername())
 			return &api.Status{
 				Status:  false,
-				Message: new(fmt.Sprintf("user '%s' already exists", request.GetUsername())),
+				Message: &msg,
 			}, nil
 		}
 

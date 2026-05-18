@@ -15,9 +15,9 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	jwt5 "github.com/golang-jwt/jwt/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
-	jwt5 "github.com/golang-jwt/jwt/v5"
 )
 
 func setupTestDB() (*db.DB, sqlmock.Sqlmock, error) {
@@ -31,6 +31,7 @@ func setupTestDB() (*db.DB, sqlmock.Sqlmock, error) {
 }
 
 type StubTokenProvider struct{}
+
 func (s *StubTokenProvider) GenerateTokens(user *db.User, clientID string, scopes string, ip string, ua string) (*jwt.Tokens, error) {
 	return &jwt.Tokens{AccessToken: "stub-access", RefreshToken: "stub-refresh"}, nil
 }
@@ -38,15 +39,15 @@ func (s *StubTokenProvider) GenerateIdToken(user *db.User, clientID string, scop
 	return "stub-id-token", nil
 }
 func (s *StubTokenProvider) GenerateSessionToken(user *db.User) (string, error) { return "", nil }
-func (s *StubTokenProvider) VerifyToken(tokenString string) (bool, error) { return true, nil }
+func (s *StubTokenProvider) VerifyToken(tokenString string) (bool, error)       { return true, nil }
 func (s *StubTokenProvider) RefreshToken(refreshToken string, user *db.User, clientID string, ip string, ua string) (*jwt.Tokens, error) {
 	return &jwt.Tokens{AccessToken: "stub-access-refreshed", RefreshToken: "stub-refresh-refreshed"}, nil
 }
 func (s *StubTokenProvider) DeleteToken(refreshToken string) error { return nil }
-func (s *StubTokenProvider) GetPublicJWKS() jwt.JWKS { return jwt.JWKS{} }
+func (s *StubTokenProvider) GetPublicJWKS() jwt.JWKS               { return jwt.JWKS{} }
 func (s *StubTokenProvider) GetClaims(tokenString string) (*jwt.TokenClaims, error) {
 	return &jwt.TokenClaims{
-		Username: "testuser",
+		Username:         "testuser",
 		RegisteredClaims: jwt5.RegisteredClaims{Issuer: "1", Audience: jwt5.ClaimStrings{"test-client"}},
 	}, nil
 }
