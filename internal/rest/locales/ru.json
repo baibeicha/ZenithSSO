@@ -1,0 +1,13 @@
+{
+    "login_title": "Войдите в свой аккаунт",
+    "username": "Имя пользователя",
+    "password": "Пароль",
+    "login_button": "Войти",
+    "register_title": "Создать аккаунт",
+    "email": "Эл. почта",
+    "register_button": "Зарегистрироваться",
+    "consent_title": "Авторизация приложения",
+    "consent_message": "Приложение запрашивает доступ к вашему аккаунту.",
+    "authorize_button": "Разрешить",
+    "deny_button": "Отклонить"
+}

@@ -57,7 +57,12 @@ func main() {
 	cleanupInterval := cfg.GetDuration("jwt.cleanup.interval") * cleanupIntervalUnit
 	go jwt.StartTokenCleanup(ctx, tokensRepository, cleanupInterval)
 
-	authService := internal.NewAuthServer(DB, tokenProvider, slog.Default())
+	issuer := cfg.GetString("sso.issuer")
+	if issuer == "" {
+		issuer = cfg.SSO.Issuer
+	}
+
+	authService := internal.NewAuthServer(DB, tokenProvider, slog.Default(), issuer)
 
 	suCfg, cansel := context.WithTimeout(ctx, 5*time.Second)
 	if err := authService.SetUpSuperuser(suCfg, cfg); err != nil {
@@ -68,12 +73,10 @@ func main() {
 
 	r := chi.NewRouter()
 
-	authHandler := rest.NewAuthHandler(authService, cfg.GetBool("server.secured"))
-	authHandler.RegisterRoutes(r)
+	customUIDir := cfg.GetString("ui.custom_dir")
 
-	fileServer := http.FileServer(http.Dir("./web"))
-	r.Handle("/*", http.StripPrefix("/", fileServer))
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./web/static"))))
+	authHandler := rest.NewAuthHandler(authService, cfg.GetBool("server.secured"), issuer, customUIDir)
+	authHandler.RegisterRoutes(r, customUIDir)
 
 	httpPort := cfg.GetInt("server.port")
 	httpServer := &http.Server{
