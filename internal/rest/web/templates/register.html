@@ -35,7 +35,7 @@
     </form>
 
     <p style="margin-top: 1.5rem; font-size: 0.875rem;">
-        Уже есть аккаунт? <a href="authorize.html" id="login-link"
+        Уже есть аккаунт? <a href="/login" id="login-link"
                              style="color: var(--primary-color); text-decoration: none;">Войти</a>
     </p>
 </div>
@@ -46,7 +46,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         const loginLink = document.getElementById('login-link');
         if (window.location.search) {
-            loginLink.href = "/authorize.html" + window.location.search;
+            loginLink.href = "/api/v1/authorize" + window.location.search;
         }
 
         document.getElementById('register-form').addEventListener('submit', async function (e) {

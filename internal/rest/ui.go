@@ -30,6 +30,11 @@ func GetFS(customDir string) fs.FS {
 		return os.DirFS("web")
 	}
 
+	if stat, err := os.Stat("internal/rest/web"); err == nil && stat.IsDir() {
+		slog.Info("Using local internal/rest/web directory")
+		return os.DirFS("internal/rest/web")
+	}
+
 	slog.Info("Using embedded UI files")
 	// return sub fs to match paths cleanly
 	subFS, err := fs.Sub(embedFS, "web")

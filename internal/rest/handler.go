@@ -62,6 +62,14 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router, customDir string) {
 
 	r.Get("/api/v1/register", h.RegisterGETHandler)
 
+	r.Get("/login", h.LoginGETHandler)
+	r.Post("/login", h.LoginPOSTHandler)
+	r.Get("/settings", h.SettingsGETHandler)
+	r.Post("/settings", h.SettingsPOSTHandler)
+	r.Post("/logout", h.LogoutPOSTHandler)
+
+	r.Get("/admin", h.AdminGETHandler)
+
 	uiFS := GetFS(customDir)
 	staticFS, err := fs.Sub(uiFS, "static")
 	if err == nil {
@@ -437,4 +445,203 @@ func buildRedirectURL(baseURI, code, state string) string {
 
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+func (h *AuthHandler) LoginGETHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sso_session")
+	if err == nil && cookie.Value != "" {
+		_, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
+		if err == nil {
+			http.Redirect(w, r, "/settings", http.StatusFound)
+			return
+		}
+	}
+
+	q := r.URL.Query()
+	data := map[string]interface{}{
+		"Error": q.Get("error"),
+		"T":     Translate(r),
+	}
+
+	err = h.templates.ExecuteTemplate(w, "login.html", data)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (h *AuthHandler) LoginPOSTHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	user, err := h.authService.ValidateUser(r.Context(), username, password)
+	if err != nil {
+		http.Redirect(w, r, "/login?error=invalid_credentials", http.StatusFound)
+		return
+	}
+
+	sessionToken, err := h.authService.CreateSessionToken(user)
+	if err == nil {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "sso_session",
+			Value:    sessionToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   h.secured,
+			MaxAge:   86400,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+func (h *AuthHandler) SettingsGETHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sso_session")
+	if err != nil || cookie.Value == "" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	user, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	isAdmin := false
+	for _, scope := range user.Scopes {
+		if scope.Name == "root" {
+			isAdmin = true
+			break
+		}
+	}
+
+	q := r.URL.Query()
+	data := map[string]interface{}{
+		"User":    user,
+		"Error":   q.Get("error"),
+		"Success": q.Get("success"),
+		"IsAdmin": isAdmin,
+		"T":       Translate(r),
+	}
+
+	err = h.templates.ExecuteTemplate(w, "settings.html", data)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (h *AuthHandler) SettingsPOSTHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sso_session")
+	if err != nil || cookie.Value == "" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	user, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/settings?error=invalid_request", http.StatusFound)
+		return
+	}
+
+	firstName := r.FormValue("first_name")
+	lastName := r.FormValue("last_name")
+	avatarURL := r.FormValue("avatar_url")
+	locale := r.FormValue("locale")
+
+	if firstName != "" {
+		user.FirstName = &firstName
+	} else {
+		user.FirstName = nil
+	}
+	if lastName != "" {
+		user.LastName = &lastName
+	} else {
+		user.LastName = nil
+	}
+	if avatarURL != "" {
+		user.AvatarURL = &avatarURL
+	} else {
+		user.AvatarURL = nil
+	}
+	if locale != "" {
+		user.Locale = &locale
+	} else {
+		user.Locale = nil
+	}
+
+	err = h.authService.UpdateUserProfile(r.Context(), user)
+	if err != nil {
+		http.Redirect(w, r, "/settings?error=update_failed", http.StatusFound)
+		return
+	}
+
+	http.Redirect(w, r, "/settings?success=Профиль%20успешно%20обновлен", http.StatusFound)
+}
+
+func (h *AuthHandler) LogoutPOSTHandler(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "sso_session",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   h.secured,
+		MaxAge:   -1,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, "/login", http.StatusFound)
+}
+func (h *AuthHandler) AdminGETHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sso_session")
+	if err != nil || cookie.Value == "" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	user, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	isAdmin := false
+	for _, scope := range user.Scopes {
+		if scope.Name == "root" {
+			isAdmin = true
+			break
+		}
+	}
+
+	if !isAdmin {
+		http.Error(w, "forbidden: admin access required", http.StatusForbidden)
+		return
+	}
+
+	users, err := h.authService.GetAllUsers(r.Context())
+
+	q := r.URL.Query()
+	data := map[string]interface{}{
+		"User":  user,
+		"Users": users,
+		"Error": q.Get("error"),
+		"T":     Translate(r),
+	}
+
+	if err != nil {
+		data["Error"] = "Failed to load users"
+	}
+
+	err = h.templates.ExecuteTemplate(w, "admin.html", data)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }

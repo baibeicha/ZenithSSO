@@ -120,6 +120,16 @@ func (r *Repository) UpdateUser(ctx context.Context, u *User) error {
 	return err
 }
 
+func (r *Repository) UpdateUserProfile(ctx context.Context, u *User) error {
+	query := `
+		UPDATE users
+		SET first_name = :first_name, last_name = :last_name, avatar_url = :avatar_url, locale = :locale
+		WHERE id = :id
+	`
+	_, err := r.db.NamedExecContext(ctx, query, u)
+	return err
+}
+
 func (r *Repository) DeleteUser(ctx context.Context, id uint64) error {
 	query := `DELETE FROM users WHERE id = $1`
 	_, err := r.db.ExecContext(ctx, query, id)
@@ -157,6 +167,39 @@ func (r *Repository) RemoveScopeFromUser(ctx context.Context, userID, scopeID ui
 	query := `DELETE FROM user_scopes WHERE user_id = $1 AND scope_id = $2`
 	_, err := r.db.ExecContext(ctx, query, userID, scopeID)
 	return err
+}
+
+func (r *Repository) GetAllUsers(ctx context.Context) ([]User, error) {
+	query := `
+		SELECT
+			u.id,
+			u.username,
+			u.email,
+			u.password,
+			u.first_name,
+			u.last_name,
+			u.avatar_url,
+			u.locale,
+			COALESCE(
+				jsonb_agg(
+					jsonb_build_object(
+						'id', s.id,
+						'name', s.name
+					)
+				) FILTER (WHERE s.id IS NOT NULL), '[]'
+			) as scopes
+		FROM users u
+		LEFT JOIN user_scopes us ON u.id = us.user_id
+		LEFT JOIN scopes s ON us.scope_id = s.id
+		GROUP BY u.id
+		ORDER BY u.id ASC
+	`
+	var users []User
+	err := r.db.SelectContext(ctx, &users, query)
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
 }
 
 func (r *Repository) GetUserById(ctx context.Context, userID uint64) (*User, error) {
