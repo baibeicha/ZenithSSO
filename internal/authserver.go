@@ -391,6 +391,10 @@ func (s *AuthServer) Logout(ctx context.Context, token *api.Token) (*api.Status,
 	return &api.Status{Status: true}, nil
 }
 
+func (s *AuthServer) GetAllUsers(ctx context.Context) ([]db.User, error) {
+	return s.repo.GetAllUsers(ctx)
+}
+
 func (s *AuthServer) GetUserInfo(ctx context.Context, accessToken string) (*db.User, error) {
 	claims, err := s.tokenProvider.GetClaims(accessToken)
 	if err != nil {
@@ -401,6 +405,10 @@ func (s *AuthServer) GetUserInfo(ctx context.Context, accessToken string) (*db.U
 	id, _ := strconv.ParseUint(userID, 10, 64)
 
 	return s.repo.GetUserById(ctx, id)
+}
+
+func (s *AuthServer) UpdateUserProfile(ctx context.Context, user *db.User) error {
+	return s.repo.UpdateUserProfile(ctx, user)
 }
 
 func (s *AuthServer) GetJWKS() jwt.JWKS {

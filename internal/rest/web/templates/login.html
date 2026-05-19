@@ -9,13 +9,15 @@
 <body>
 <div class="sso-card">
     <h2>ZenithSSO</h2>
-    <p class="subtitle">Войдите для продолжения</p>
+    <p class="subtitle">Войдите в свой аккаунт</p>
 
+    {{if .Error}}
+    <div id="error-msg" class="error-message" style="display: block;">{{.Error}}</div>
+    {{else}}
     <div id="error-msg" class="error-message"></div>
+    {{end}}
 
-    <form action="/api/v1/authorize" method="POST">
-        <div id="hidden_oauth_params"></div>
-
+    <form action="/login" method="POST">
         <div class="form-group">
             <label for="username">Имя пользователя</label>
             <input type="text" id="username" name="username" required>
@@ -29,17 +31,8 @@
         <button type="submit" class="btn">Войти</button>
     </form>
     <p style="margin-top: 1.5rem; font-size: 0.875rem;">
-        Нет аккаунта? <a href="/api/v1/register" id="register-link" style="color: var(--primary-color); text-decoration: none;">Зарегистрироваться</a>
+        Нет аккаунта? <a href="/api/v1/register" style="color: var(--primary-color); text-decoration: none;">Зарегистрироваться</a>
     </p>
 </div>
-<script src="/static/js/auth.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const registerLink = document.getElementById('register-link');
-        if (window.location.search) {
-            registerLink.href = "/api/v1/register" + window.location.search;
-        }
-    });
-</script>
 </body>
 </html>
