@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход - ZenithSSO</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="sso-card">
+    <h2>ZenithSSO</h2>
+    <p class="subtitle">Войдите для продолжения</p>
+
+    <div id="error-msg" class="error-message"></div>
+
+    <form action="/api/v1/authorize" method="POST">
+        <div id="hidden_oauth_params"></div>
+
+        <div class="form-group">
+            <label for="username">Имя пользователя</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+
+        <button type="submit" class="btn">Войти</button>
+    </form>
+    <p style="margin-top: 1.5rem; font-size: 0.875rem;">
+        Нет аккаунта? <a href="/api/v1/register" id="register-link" style="color: var(--primary-color); text-decoration: none;">Зарегистрироваться</a>
+    </p>
+</div>
+<script src="/static/js/authorize.js"></script>
+</body>
+</html>

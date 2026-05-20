@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация - ZenithSSO</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="sso-card">
+    <h2>Регистрация</h2>
+    <p class="subtitle">Создайте новый аккаунт ZenithSSO</p>
+
+    <div id="error-msg" class="error-message"></div>
+    <div id="success-msg"
+         style="display: none; color: #16a34a; background: #dcfce7; padding: 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem;"></div>
+
+    <form id="register-form">
+        <div class="form-group">
+            <label for="username">Имя пользователя</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+
+        <button type="submit" class="btn">Зарегистрироваться</button>
+    </form>
+
+    <p style="margin-top: 1.5rem; font-size: 0.875rem;">
+        Уже есть аккаунт? <a href="/login" id="login-link"
+                             style="color: var(--primary-color); text-decoration: none;">Войти</a>
+    </p>
+</div>
+<script src="/static/js/register.js"></script>
+</body>
+</html>
