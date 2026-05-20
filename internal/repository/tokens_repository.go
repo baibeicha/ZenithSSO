@@ -1,7 +1,6 @@
-package jwt
+package repository
 
 import (
-	"AuthServer/internal/db"
 	"context"
 	"fmt"
 	"log/slog"
@@ -9,7 +8,7 @@ import (
 )
 
 type TokensRepository struct {
-	DB         *db.DB
+	DB         *DB
 	refreshTTL time.Duration
 }
 
@@ -54,7 +53,7 @@ func (r *TokensRepository) CleanExpiredTokens(ctx context.Context) error {
 	return nil
 }
 
-func NewTokensRepository(DB *db.DB, refreshTTL time.Duration) *TokensRepository {
+func NewTokensRepository(DB *DB, refreshTTL time.Duration) *TokensRepository {
 	return &TokensRepository{
 		DB:         DB,
 		refreshTTL: refreshTTL,

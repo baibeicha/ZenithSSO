@@ -1,4 +1,4 @@
-package db
+package domain
 
 import (
 	"encoding/json"
@@ -68,13 +68,6 @@ func (s *ScopesList) StringFromAllowed(allowedScopes string) string {
 	return ""
 }
 
-type Token struct {
-	Id        uint64    `db:"id"`
-	Token     string    `db:"token"`
-	ExpiresAt time.Time `db:"expires_at"`
-	UserId    uint64    `db:"user_id"`
-}
-
 type Client struct {
 	ID               string          `db:"id"`
 	ClientID         string          `db:"client_id"`
@@ -93,4 +86,14 @@ type AuthCode struct {
 	Scopes              string    `db:"scopes"`
 	Nonce               string    `db:"nonce"`
 	ExpiresAt           time.Time `db:"expires_at"`
+}
+
+type RefreshToken struct {
+	Token     string    `db:"token"`
+	UserID    uint64    `db:"user_id"`
+	ClientID  string    `db:"client_id"`
+	IPAddress string    `db:"ip_address"`
+	UserAgent string    `db:"user_agent"`
+	ExpiresAt time.Time `db:"expires_at"`
+	CreatedAt time.Time `db:"created_at"`
 }

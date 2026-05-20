@@ -1,19 +1,20 @@
-package db
+package repository
 
 import (
+	"AuthServer/internal/domain"
 	"context"
 	"log/slog"
 )
 
-type Repository struct {
+type UserRepository struct {
 	db *DB
 }
 
-func NewRepository(db *DB) *Repository {
-	return &Repository{db: db}
+func NewUserRepository(db *DB) *UserRepository {
+	return &UserRepository{db: db}
 }
 
-func (r *Repository) CreateUser(ctx context.Context, u *User) (uint64, error) {
+func (r *UserRepository) CreateUser(ctx context.Context, u *domain.User) (uint64, error) {
 	var id uint64
 	query := `
 		INSERT INTO users (username, email, password) 
@@ -28,7 +29,7 @@ func (r *Repository) CreateUser(ctx context.Context, u *User) (uint64, error) {
 	return id, nil
 }
 
-func (r *Repository) UserExistsByUsername(ctx context.Context, username string) (bool, error) {
+func (r *UserRepository) UserExistsByUsername(ctx context.Context, username string) (bool, error) {
 	result := make([]bool, 1)
 	err := r.db.Select(&result, "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)", username)
 
@@ -44,7 +45,7 @@ func (r *Repository) UserExistsByUsername(ctx context.Context, username string) 
 	return result[0], nil
 }
 
-func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
 		SELECT 
 			u.id, 
@@ -69,7 +70,7 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 		WHERE u.email = $1
 		GROUP BY u.id
 	`
-	var user User
+	var user domain.User
 	err := r.db.GetContext(ctx, &user, query, email)
 	if err != nil {
 		return nil, err
@@ -77,7 +78,7 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 	return &user, nil
 }
 
-func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*User, error) {
+func (r *UserRepository) GetUserByUsername(ctx context.Context, username string) (*domain.User, error) {
 	query := `
 		SELECT 
 			u.id, 
@@ -102,7 +103,7 @@ func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*U
 		WHERE u.username = $1
 		GROUP BY u.id
 	`
-	var user User
+	var user domain.User
 	err := r.db.GetContext(ctx, &user, query, username)
 	if err != nil {
 		return nil, err
@@ -110,7 +111,7 @@ func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*U
 	return &user, nil
 }
 
-func (r *Repository) UpdateUser(ctx context.Context, u *User) error {
+func (r *UserRepository) UpdateUser(ctx context.Context, u *domain.User) error {
 	query := `
 		UPDATE users 
 		SET username = :username, email = :email, password = :password 
@@ -120,7 +121,7 @@ func (r *Repository) UpdateUser(ctx context.Context, u *User) error {
 	return err
 }
 
-func (r *Repository) UpdateUserProfile(ctx context.Context, u *User) error {
+func (r *UserRepository) UpdateUserProfile(ctx context.Context, u *domain.User) error {
 	query := `
 		UPDATE users
 		SET first_name = :first_name, last_name = :last_name, avatar_url = :avatar_url, locale = :locale
@@ -130,13 +131,13 @@ func (r *Repository) UpdateUserProfile(ctx context.Context, u *User) error {
 	return err
 }
 
-func (r *Repository) DeleteUser(ctx context.Context, id uint64) error {
+func (r *UserRepository) DeleteUser(ctx context.Context, id uint64) error {
 	query := `DELETE FROM users WHERE id = $1`
 	_, err := r.db.ExecContext(ctx, query, id)
 	return err
 }
 
-func (r *Repository) CreateScope(ctx context.Context, name string) (uint64, error) {
+func (r *UserRepository) CreateScope(ctx context.Context, name string) (uint64, error) {
 	var id uint64
 	query := `INSERT INTO scopes (name) VALUES ($1) RETURNING id`
 
@@ -147,13 +148,13 @@ func (r *Repository) CreateScope(ctx context.Context, name string) (uint64, erro
 	return id, nil
 }
 
-func (r *Repository) DeleteScope(ctx context.Context, id uint64) error {
+func (r *UserRepository) DeleteScope(ctx context.Context, id uint64) error {
 	query := `DELETE FROM scopes WHERE id = $1`
 	_, err := r.db.ExecContext(ctx, query, id)
 	return err
 }
 
-func (r *Repository) AddScopeToUser(ctx context.Context, userID, scopeID uint64) error {
+func (r *UserRepository) AddScopeToUser(ctx context.Context, userID, scopeID uint64) error {
 	query := `
 		INSERT INTO user_scopes (user_id, scope_id) 
 		VALUES ($1, $2) 
@@ -163,13 +164,13 @@ func (r *Repository) AddScopeToUser(ctx context.Context, userID, scopeID uint64)
 	return err
 }
 
-func (r *Repository) RemoveScopeFromUser(ctx context.Context, userID, scopeID uint64) error {
+func (r *UserRepository) RemoveScopeFromUser(ctx context.Context, userID, scopeID uint64) error {
 	query := `DELETE FROM user_scopes WHERE user_id = $1 AND scope_id = $2`
 	_, err := r.db.ExecContext(ctx, query, userID, scopeID)
 	return err
 }
 
-func (r *Repository) GetAllUsers(ctx context.Context) ([]User, error) {
+func (r *UserRepository) GetAllUsers(ctx context.Context) ([]domain.User, error) {
 	query := `
 		SELECT
 			u.id,
@@ -194,7 +195,7 @@ func (r *Repository) GetAllUsers(ctx context.Context) ([]User, error) {
 		GROUP BY u.id
 		ORDER BY u.id ASC
 	`
-	var users []User
+	var users []domain.User
 	err := r.db.SelectContext(ctx, &users, query)
 	if err != nil {
 		return nil, err
@@ -202,7 +203,7 @@ func (r *Repository) GetAllUsers(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-func (r *Repository) GetUserById(ctx context.Context, userID uint64) (*User, error) {
+func (r *UserRepository) GetUserById(ctx context.Context, userID uint64) (*domain.User, error) {
 	query := `
 		SELECT 
 			u.id, 
@@ -227,7 +228,7 @@ func (r *Repository) GetUserById(ctx context.Context, userID uint64) (*User, err
 		WHERE u.id = $1
 		GROUP BY u.id
 	`
-	var user User
+	var user domain.User
 	err := r.db.GetContext(ctx, &user, query, userID)
 	if err != nil {
 		return nil, err

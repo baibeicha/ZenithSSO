@@ -3,9 +3,11 @@ package main
 import (
 	"AuthServer/api"
 	"AuthServer/config"
-	"AuthServer/internal"
-	"AuthServer/internal/db"
+	grpcDelivery "AuthServer/internal/delivery/grpc"
+	"AuthServer/internal/usecase"
+
 	"AuthServer/internal/jwt"
+	"AuthServer/internal/repository"
 	"AuthServer/internal/rest"
 	"context"
 	"errors"
@@ -18,7 +20,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"google.golang.org/grpc"
+	grpcPkg "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -29,7 +31,7 @@ func main() {
 	cfg := config.MustLoad("config")
 
 	datasource := config.NewDatasourceFromConfig(cfg)
-	DB, err := db.ConnectSource(datasource)
+	DB, err := repository.ConnectSource(datasource)
 	if err != nil {
 		slog.Error("Error while connecting to database", "err", err)
 		return
@@ -45,7 +47,7 @@ func main() {
 	accessTTL := cfg.GetDuration("jwt.ttl.access") * ttlUnit
 	refreshTTL := cfg.GetDuration("jwt.ttl.refresh") * ttlUnit
 
-	tokensRepository := jwt.NewTokensRepository(DB, refreshTTL)
+	tokensRepository := repository.NewTokensRepository(DB, refreshTTL)
 
 	tokenProvider, err := jwt.NewJwtTokenProvider(cfg, tokensRepository, accessTTL, refreshTTL)
 	if err != nil {
@@ -62,7 +64,13 @@ func main() {
 		issuer = cfg.SSO.Issuer
 	}
 
-	authService := internal.NewAuthServer(DB, tokenProvider, slog.Default(), issuer)
+	userRepo := repository.NewUserRepository(DB)
+	clientRepo := repository.NewClientsRepository(DB)
+	authCodesRepo := repository.NewAuthCodesRepository(DB)
+	authService := usecase.NewAuthUsecase(userRepo, clientRepo, authCodesRepo, tokenProvider, slog.Default(), issuer)
+
+	sessionRepo := repository.NewSessionsRepository(DB)
+	sessionService := usecase.NewSessionUsecase(sessionRepo)
 
 	suCfg, cansel := context.WithTimeout(ctx, 5*time.Second)
 	if err := authService.SetUpSuperuser(suCfg, cfg); err != nil {
@@ -75,7 +83,7 @@ func main() {
 
 	customUIDir := cfg.GetString("ui.custom_dir")
 
-	authHandler := rest.NewAuthHandler(authService, cfg.GetBool("server.secured"), issuer, customUIDir)
+	authHandler := rest.NewAuthHandler(authService, sessionService, cfg.GetBool("server.secured"), issuer, customUIDir)
 	authHandler.RegisterRoutes(r, customUIDir)
 
 	httpPort := cfg.GetInt("server.port")
@@ -98,7 +106,7 @@ func main() {
 	}
 	defer listener.Close()
 
-	var opts []grpc.ServerOption
+	var opts []grpcPkg.ServerOption
 
 	if cfg.GRPC.TLS.Enabled {
 		creds, err := credentials.NewServerTLSFromFile(cfg.GRPC.TLS.CertPath, cfg.GRPC.TLS.KeyPath)
@@ -106,15 +114,16 @@ func main() {
 			slog.Error("Failed to setup TLS", "err", err)
 			return
 		}
-		opts = append(opts, grpc.Creds(creds))
+		opts = append(opts, grpcPkg.Creds(creds))
 		slog.Info("gRPC server is starting in SECURE mode (TLS enabled)")
 	} else {
 		slog.Info("gRPC server is starting in INSECURE mode (plaintext)")
 	}
 
-	server := grpc.NewServer(opts...)
+	server := grpcPkg.NewServer(opts...)
 
-	api.RegisterAuthServiceServer(server, authService)
+	grpcHandler := grpcDelivery.NewAuthHandler(authService)
+	api.RegisterAuthServiceServer(server, grpcHandler)
 
 	go func() {
 		<-ctx.Done()

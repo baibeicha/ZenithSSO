@@ -1,7 +1,7 @@
 package jwt
 
 import (
-	"AuthServer/internal/db"
+	"AuthServer/internal/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -32,7 +32,7 @@ type TokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (tp *JwtTokenProvider) GenerateAccess(user *db.User, clientID, allowedScopes string) (string, error) {
+func (tp *JwtTokenProvider) GenerateAccess(user *domain.User, clientID, allowedScopes string) (string, error) {
 	var scopes string
 	if allowedScopes != "" {
 		scopes = user.Scopes.StringFromAllowed(allowedScopes)
@@ -55,7 +55,7 @@ func (tp *JwtTokenProvider) GenerateAccess(user *db.User, clientID, allowedScope
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateRefresh(user *db.User, clientID, allowedScopes string) (string, error) {
+func (tp *JwtTokenProvider) GenerateRefresh(user *domain.User, clientID, allowedScopes string) (string, error) {
 	claims := TokenClaims{
 		Username:      user.Username,
 		AllowedScopes: allowedScopes,
@@ -71,7 +71,7 @@ func (tp *JwtTokenProvider) GenerateRefresh(user *db.User, clientID, allowedScop
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateIdToken(user *db.User, clientID string, scopes string, nonce string, issuer string) (string, error) {
+func (tp *JwtTokenProvider) GenerateIdToken(user *domain.User, clientID string, scopes string, nonce string, issuer string) (string, error) {
 	claims := jwt.MapClaims{
 		"iss":  issuer,
 		"sub":  strconv.FormatUint(user.ID, 10),
@@ -118,7 +118,7 @@ func (tp *JwtTokenProvider) GenerateIdToken(user *db.User, clientID string, scop
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateTokens(user *db.User, clientID, scopes string, ipAddress, userAgent string) (*Tokens, error) {
+func (tp *JwtTokenProvider) GenerateTokens(user *domain.User, clientID, scopes string, ipAddress, userAgent string) (*Tokens, error) {
 	accessToken, err := tp.GenerateAccess(user, clientID, scopes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
@@ -164,7 +164,7 @@ func (tp *JwtTokenProvider) VerifyToken(tokenString string) (bool, error) {
 	return token.Valid, nil
 }
 
-func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *db.User, clientID string, ipAddress, userAgent string) (*Tokens, error) {
+func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *domain.User, clientID string, ipAddress, userAgent string) (*Tokens, error) {
 	isValid, err := tp.VerifyToken(refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
@@ -227,7 +227,7 @@ func (tp *JwtTokenProvider) DeleteToken(refreshToken string) error {
 	return nil
 }
 
-func (tp *JwtTokenProvider) GenerateSessionToken(user *db.User) (string, error) {
+func (tp *JwtTokenProvider) GenerateSessionToken(user *domain.User) (string, error) {
 	claims := TokenClaims{
 		Username: user.Username,
 		RegisteredClaims: jwt.RegisteredClaims{

@@ -1,6 +1,7 @@
-package db
+package repository
 
 import (
+	"AuthServer/internal/domain"
 	"context"
 )
 
@@ -12,8 +13,8 @@ func NewClientsRepository(db *DB) *ClientsRepository {
 	return &ClientsRepository{db: db}
 }
 
-func (r *ClientsRepository) GetClientByID(ctx context.Context, clientID string) (*Client, error) {
-	var client Client
+func (r *ClientsRepository) GetClientByID(ctx context.Context, clientID string) (*domain.Client, error) {
+	var client domain.Client
 	query := `
 		SELECT id, client_id, client_secret_hash, redirect_uris 
 		FROM clients 

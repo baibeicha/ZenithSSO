@@ -1,6 +1,7 @@
-package db
+package repository
 
 import (
+	"AuthServer/internal/domain"
 	"context"
 )
 
@@ -12,7 +13,7 @@ func NewAuthCodesRepository(db *DB) *AuthCodesRepository {
 	return &AuthCodesRepository{db: db}
 }
 
-func (r *AuthCodesRepository) SaveCode(ctx context.Context, code *AuthCode) error {
+func (r *AuthCodesRepository) SaveCode(ctx context.Context, code *domain.AuthCode) error {
 	query := `
 		INSERT INTO auth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, scopes, nonce, expires_at)
 		VALUES (:code, :client_id, :user_id, :redirect_uri, :code_challenge, :code_challenge_method, :scopes, :nonce, :expires_at)
@@ -21,8 +22,8 @@ func (r *AuthCodesRepository) SaveCode(ctx context.Context, code *AuthCode) erro
 	return err
 }
 
-func (r *AuthCodesRepository) GetAndDeleteCode(ctx context.Context, code string) (*AuthCode, error) {
-	var authCode AuthCode
+func (r *AuthCodesRepository) GetAndDeleteCode(ctx context.Context, code string) (*domain.AuthCode, error) {
+	var authCode domain.AuthCode
 	query := `
 		DELETE FROM auth_codes 
 		WHERE code = $1 

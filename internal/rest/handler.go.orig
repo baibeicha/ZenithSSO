@@ -9,33 +9,32 @@ import (
 	"net/url"
 	"strings"
 
+	"AuthServer/api"
+	"AuthServer/internal"
 	"AuthServer/internal/encoder"
-	"AuthServer/internal/usecase"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 )
 
 type AuthHandler struct {
-	authService    *usecase.AuthUsecase
-	sessionService *usecase.SessionUsecase
-	secured        bool
-	issuer         string
-	templates      *template.Template
+	authService *internal.AuthServer
+	secured     bool
+	issuer      string
+	templates   *template.Template
 }
 
-func NewAuthHandler(as *usecase.AuthUsecase, sessionService *usecase.SessionUsecase, secured bool, issuer string, customDir string) *AuthHandler {
+func NewAuthHandler(as *internal.AuthServer, secured bool, issuer string, customDir string) *AuthHandler {
 	uiFS := GetFS(customDir)
 	tmpl := ParseTemplates(uiFS)
 
 	LoadLocales()
 
 	return &AuthHandler{
-		authService:    as,
-		sessionService: sessionService,
-		secured:        secured,
-		issuer:         issuer,
-		templates:      tmpl,
+		authService: as,
+		secured:     secured,
+		issuer:      issuer,
+		templates:   tmpl,
 	}
 }
 
@@ -66,7 +65,6 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router, customDir string) {
 	r.Get("/login", h.LoginGETHandler)
 	r.Post("/login", h.LoginPOSTHandler)
 	r.Get("/settings", h.SettingsGETHandler)
-	r.Post("/settings/revoke-session", h.RevokeSessionPOSTHandler)
 	r.Post("/settings", h.SettingsPOSTHandler)
 	r.Post("/logout", h.LogoutPOSTHandler)
 
@@ -163,7 +161,7 @@ func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request
 
 	clientID := q.Get("client_id")
 
-	_, err := h.authService.GetClientByID(r.Context(), clientID)
+	_, err := h.authService.ClientsRepo.GetClientByID(r.Context(), clientID)
 	if err != nil {
 		http.Error(w, "invalid_client: application not found", http.StatusBadRequest)
 		return
@@ -295,18 +293,14 @@ func (h *AuthHandler) ConsentPOSTHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
+	var req api.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
 		return
 	}
 
-	err := h.authService.Register(r.Context(), req.Username, req.Email, req.Password)
+	resp, err := h.authService.Register(r.Context(), &req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -314,6 +308,12 @@ func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	if !resp.Status {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": resp.GetMessage()})
+		return
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "user successfully registered"})
 }
@@ -341,7 +341,7 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 			return "", errors.New("invalid_client")
 		}
 
-		client, err := h.authService.GetClientByID(r.Context(), clientID)
+		client, err := h.authService.ClientsRepo.GetClientByID(r.Context(), clientID)
 		if err != nil {
 			return "", errors.New("invalid_client")
 		}
@@ -405,10 +405,7 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(tokens)
 
 	case "password", "":
-		var req struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
+		var req api.AuthRequest
 		if r.Header.Get("Content-Type") == "application/json" {
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -420,13 +417,13 @@ func (h *AuthHandler) TokenHandler(w http.ResponseWriter, r *http.Request) {
 			req.Password = r.FormValue("password")
 		}
 
-		tokens, err := h.authService.Login(r.Context(), req.Username, req.Password)
+		resp, err := h.authService.Login(r.Context(), &req)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
-		json.NewEncoder(w).Encode(tokens)
+		json.NewEncoder(w).Encode(resp)
 
 	default:
 		w.WriteHeader(http.StatusBadRequest)
@@ -523,58 +520,19 @@ func (h *AuthHandler) SettingsGETHandler(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	sessions, _ := h.sessionService.GetUserSessions(r.Context(), user.ID)
-
 	q := r.URL.Query()
 	data := map[string]interface{}{
-		"User":           user,
-		"Error":          q.Get("error"),
-		"Success":        q.Get("success"),
-		"IsAdmin":        isAdmin,
-		"Sessions":       sessions,
-		"CurrentSession": cookie.Value,
-		"T":              Translate(r),
+		"User":    user,
+		"Error":   q.Get("error"),
+		"Success": q.Get("success"),
+		"IsAdmin": isAdmin,
+		"T":       Translate(r),
 	}
 
 	err = h.templates.ExecuteTemplate(w, "settings.html", data)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
-}
-
-func (h *AuthHandler) RevokeSessionPOSTHandler(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("sso_session")
-	if err != nil || cookie.Value == "" {
-		http.Redirect(w, r, "/login", http.StatusFound)
-		return
-	}
-
-	user, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
-	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusFound)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/settings?error=invalid_request", http.StatusFound)
-		return
-	}
-
-	tokenToRevoke := r.FormValue("token")
-	allExceptCurrent := r.FormValue("all_except_current")
-
-	if allExceptCurrent == "true" {
-		err = h.sessionService.RevokeAllExceptCurrent(r.Context(), user.ID, cookie.Value)
-	} else {
-		err = h.sessionService.RevokeSession(r.Context(), user.ID, tokenToRevoke)
-	}
-
-	if err != nil {
-		http.Redirect(w, r, "/settings?error=revoke_failed", http.StatusFound)
-		return
-	}
-
-	http.Redirect(w, r, "/settings?success=Session revoked", http.StatusFound)
 }
 
 func (h *AuthHandler) SettingsPOSTHandler(w http.ResponseWriter, r *http.Request) {
