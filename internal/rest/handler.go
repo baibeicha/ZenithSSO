@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"bytes"
+	"log/slog"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -86,10 +88,14 @@ func (h *AuthHandler) RegisterGETHandler(w http.ResponseWriter, r *http.Request)
 	data := map[string]interface{}{
 		"T": Translate(r),
 	}
-	err := h.templates.ExecuteTemplate(w, "register.html", data)
+var buf bytes.Buffer
+	err := h.templates.ExecuteTemplate(&buf, "register.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) DiscoveryHandler(w http.ResponseWriter, r *http.Request) {
@@ -188,10 +194,14 @@ func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request
 		"T":     Translate(r),
 	}
 
-	err = h.templates.ExecuteTemplate(w, "authorize.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "authorize.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -261,10 +271,14 @@ func (h *AuthHandler) ConsentGETHandler(w http.ResponseWriter, r *http.Request) 
 	data := map[string]interface{}{
 		"T": Translate(r),
 	}
-	err = h.templates.ExecuteTemplate(w, "consent.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "consent.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) ConsentPOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -474,10 +488,14 @@ func (h *AuthHandler) LoginGETHandler(w http.ResponseWriter, r *http.Request) {
 		"T":     Translate(r),
 	}
 
-	err = h.templates.ExecuteTemplate(w, "login.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "login.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) LoginPOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -551,10 +569,14 @@ func (h *AuthHandler) SettingsGETHandler(w http.ResponseWriter, r *http.Request)
 		"T":              Translate(r),
 	}
 
-	err = h.templates.ExecuteTemplate(w, "settings.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "settings.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) RevokeSessionPOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -699,10 +721,14 @@ func (h *AuthHandler) AdminGETHandler(w http.ResponseWriter, r *http.Request) {
 		data["Error"] = "Failed to load data"
 	}
 
-	err = h.templates.ExecuteTemplate(w, "admin.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "admin.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) checkAdminAccess(r *http.Request) bool {
