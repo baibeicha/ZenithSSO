@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Админ панель - ZenithSSO</title>
+    <title>{{.T "admin_panel"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div class="sso-card admin-card">
-    <h2>Админ панель</h2>
-    <p class="subtitle">Управление пользователями системы</p>
+    <h2>{{.T "admin_panel"}}</h2>
+    <p class="subtitle">{{.T "admin_subtitle"}}</p>
 
     {{if .Error}}
-    <div class="error-message" style="display: block;">{{.Error}}</div>
+    <div class="error-message" class="display-block">{{.Error}}</div>
     {{end}}
 
     <table class="admin-table">
         <thead>
             <tr>
                 <th>ID</th>
-                <th>Имя пользователя</th>
+                <th>{{.T "username"}}</th>
                 <th>Email</th>
-                <th>Роли/Scopes</th>
+                <th>{{.T "admin_roles_scopes"}}</th>
             </tr>
         </thead>
         <tbody>
@@ -32,58 +32,58 @@
                 <td>{{.Email}}</td>
                 <td>
                     {{range .Scopes}}
-                        <span style="background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">{{.Name}}</span>
+                        <span class="badge">{{.Name}}</span>
                     {{end}}
                 </td>
             </tr>
             {{else}}
             <tr>
-                <td colspan="4" style="text-align: center; color: var(--text-muted);">Пользователи не найдены</td>
+                <td colspan="4" class="text-center text-muted">{{.T "admin_users_not_found"}}</td>
             </tr>
             {{end}}
         </tbody>
     </table>
 
-    <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-        <h3>Создать роль (Scope)</h3>
+    <div class="mt-2rem border-top pt-1rem">
+        <h3>{{.T "admin_create_role"}}</h3>
         <form action="/admin/scopes" method="POST">
             <div class="form-group">
-                <label for="name">Название роли</label>
-                <input type="text" id="name" name="name" required placeholder="Например: admin">
+                <label for="name">{{.T "admin_role_name"}}</label>
+                <input type="text" id="name" name="name" required placeholder="{{.T "admin_role_name_placeholder"}}">
             </div>
             <div class="form-group">
-                <label for="description">Описание</label>
-                <input type="text" id="description" name="description" placeholder="Описание роли">
+                <label for="description">{{.T "admin_role_desc"}}</label>
+                <input type="text" id="description" name="description" placeholder="{{.T "admin_role_desc_placeholder"}}">
             </div>
-            <button type="submit" class="btn btn-primary">Создать</button>
+            <button type="submit" class="btn btn-primary">{{.T "admin_create_button"}}</button>
         </form>
     </div>
 
-    <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-        <h3>Назначить роль пользователю</h3>
+    <div class="mt-2rem border-top pt-1rem">
+        <h3>{{.T "admin_assign_role_title"}}</h3>
         <form action="/admin/users/scopes" method="POST">
             <div class="form-group">
-                <label for="user_id">Пользователь</label>
-                <select id="user_id" name="user_id" required style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box;">
+                <label for="user_id">{{.T "admin_user_label"}}</label>
+                <select id="user_id" name="user_id" required class="select-field">
                     {{range .Users}}
                     <option value="{{.ID}}">{{.Username}} ({{.Email}})</option>
                     {{end}}
                 </select>
             </div>
             <div class="form-group">
-                <label for="scope_id">Роль</label>
-                <select id="scope_id" name="scope_id" required style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box;">
+                <label for="scope_id">{{.T "admin_role_label"}}</label>
+                <select id="scope_id" name="scope_id" required class="select-field">
                     {{range .Scopes}}
                     <option value="{{.ID}}">{{.Name}}</option>
                     {{end}}
                 </select>
             </div>
-            <button type="submit" class="btn btn-primary">Назначить</button>
+            <button type="submit" class="btn btn-primary">{{.T "admin_assign_button"}}</button>
         </form>
     </div>
 
-    <div style="margin-top: 1.5rem; text-align: left;">
-        <a href="/settings" style="color: var(--primary-color); text-decoration: none; font-size: 0.875rem;">&larr; Назад к настройкам</a>
+    <div class="mt-1_5rem text-left">
+        <a href="/settings" class="link-primary font-size-sm">&larr; {{.T "admin_back_to_settings"}}</a>
     </div>
 </div>
 </body>

@@ -39,7 +39,7 @@ func (s *StubTokenProvider) GenerateTokens(user *domain.User, clientID string, s
 func (s *StubTokenProvider) GenerateIdToken(user *domain.User, clientID string, scopes string, nonce string, issuer string) (string, error) {
 	return "stub-id-token", nil
 }
-func (s *StubTokenProvider) GenerateSessionToken(user *domain.User) (string, error) { return "", nil }
+func (s *StubTokenProvider) GenerateSessionToken(user *domain.User, ipAddress, userAgent string) (string, error) { return "", nil }
 func (s *StubTokenProvider) VerifyToken(tokenString string) (bool, error)           { return true, nil }
 func (s *StubTokenProvider) RefreshToken(refreshToken string, user *domain.User, clientID string, ip string, ua string) (*jwt.Tokens, error) {
 	return &jwt.Tokens{AccessToken: "stub-access-refreshed", RefreshToken: "stub-refresh-refreshed"}, nil

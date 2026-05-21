@@ -26,7 +26,17 @@ document.addEventListener("DOMContentLoaded", function() {
     avatarInput.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault();
+            document.getElementById('avatar_url').value = avatarInput.value;
             document.getElementById('avatar-form').submit();
         }
     });
+
+    const mainForm = document.querySelector('form[action="/settings"]:not(#avatar-form)');
+    if (mainForm) {
+        mainForm.addEventListener('submit', function() {
+            if (avatarInput.value) {
+                document.getElementById('avatar_url').value = avatarInput.value;
+            }
+        });
+    }
 });

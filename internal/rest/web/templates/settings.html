@@ -3,93 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Настройки - ZenithSSO</title>
+    <title>{{.T "settings_page_title"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div class="sso-card">
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <div class="avatar-container" style="position: relative; display: inline-block; width: 100px; height: 100px; border-radius: 50%; overflow: hidden; background-color: #f3f4f6; cursor: pointer;">
-            <img id="user-avatar" src="{{if .User.AvatarURL}}{{.User.AvatarURL}}{{else}}/static/img/default-avatar.png{{end}}" alt="User Avatar" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="avatar-overlay" style="position: absolute; bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); color: white; display: flex; justify-content: center; align-items: center; font-size: 12px; transition: opacity 0.2s; opacity: 0;">
+    <div class="text-center mb-2rem">
+        <div class="avatar-container relative inline-block avatar-size rounded-full overflow-hidden bg-gray-100 cursor-pointer">
+            <img id="user-avatar" src="{{if .User.AvatarURL}}{{.User.AvatarURL}}{{else}}/static/img/default-avatar.png{{end}}" alt="User Avatar" class="w-100 h-100 object-cover">
+            <div class="avatar-overlay absolute bottom-0 left-0 w-100 avatar-overlay-base">
                 Edit
             </div>
         </div>
-        <div id="avatar-input-container" style="display: none; margin-top: 10px;">
+        <div id="avatar-input-container" class="display-none mt-10px">
             <form action="/settings" method="POST" id="avatar-form">
-                <input type="url" name="avatar_url" id="avatar_url_input" placeholder="Paste image URL here" style="width: 100%; padding: 5px; box-sizing: border-box; font-size: 12px;">
+                <input type="url" name="avatar_url" id="avatar_url_input" placeholder="Paste image URL here" class="w-100 box-sizing-border avatar-input-field">
                 <input type="hidden" name="first_name" value="{{if .User.FirstName}}{{.User.FirstName}}{{end}}">
                 <input type="hidden" name="last_name" value="{{if .User.LastName}}{{.User.LastName}}{{end}}">
                 <input type="hidden" name="locale" value="{{if .User.Locale}}{{.User.Locale}}{{end}}">
-                <button type="submit" style="display: none;">Save</button>
+                <button type="submit" class="display-none">Save</button>
             </form>
         </div>
     </div>
 
-    <h2>Настройки профиля</h2>
-    <p class="subtitle">Управление данными аккаунта {{.User.Username}}</p>
+    <h2>{{.T "settings_heading"}}</h2>
+    <p class="subtitle">{{.T "settings_subtitle"}} {{.User.Username}}</p>
 
     {{if .Error}}
-    <div class="error-message" style="display: block;">{{.Error}}</div>
+    <div class="error-message" class="display-block">{{.Error}}</div>
     {{end}}
     {{if .Success}}
-    <div style="color: #16a34a; background: #dcfce7; padding: 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem;">{{.Success}}</div>
+    <div class="success-banner mb-1rem">{{.Success}}</div>
     {{end}}
 
     {{if .IsAdmin}}
-    <div style="margin-bottom: 1.5rem; text-align: left;"><a href="/admin" style="color: var(--primary-color); text-decoration: none; font-size: 0.875rem;">&rarr; Перейти в Админ панель</a></div>
+    <div class="mb-1_5rem text-left"><a href="/admin" class="link-primary font-size-sm">&rarr; {{.T "go_to_admin"}}</a></div>
     {{end}}
 
     <form action="/settings" method="POST">
         <div class="form-group">
-            <label for="first_name">Имя</label>
+            <label for="first_name">{{.T "first_name"}}</label>
             <input type="text" id="first_name" name="first_name" value="{{if .User.FirstName}}{{.User.FirstName}}{{end}}">
         </div>
 
         <div class="form-group">
-            <label for="last_name">Фамилия</label>
+            <label for="last_name">{{.T "last_name"}}</label>
             <input type="text" id="last_name" name="last_name" value="{{if .User.LastName}}{{.User.LastName}}{{end}}">
         </div>
 
-        <div class="form-group" style="display: none;">
-            <label for="avatar_url">URL аватара</label>
+        <div class="form-group" class="display-none">
+            <label for="avatar_url">{{.T "avatar_url"}}</label>
             <input type="url" id="avatar_url" name="avatar_url" value="{{if .User.AvatarURL}}{{.User.AvatarURL}}{{end}}">
         </div>
 
         <div class="form-group">
-            <label for="locale">Язык (локаль)</label>
+            <label for="locale">{{.T "locale_label"}}</label>
             <input type="text" id="locale" name="locale" value="{{if .User.Locale}}{{.User.Locale}}{{end}}" placeholder="ru">
         </div>
 
-        <button type="submit" class="btn">Сохранить</button>
+        <button type="submit" class="btn">{{.T "save_button"}}</button>
     </form>
 
-    <div style="margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: 1rem;">
-        <h3>Активные сессии</h3>
+    <div class="mt-2rem border-top pt-1rem">
+        <h3>{{.T "active_sessions"}}</h3>
         {{range .Sessions}}
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f3f4f6;">
+        <div class="display-flex justify-between align-center p-0_5rem-0 border-bottom">
             <div>
-                <div style="font-size: 0.875rem; font-weight: 500;">{{.IPAddress}} {{if eq .Token $.CurrentSession}}(Текущая){{end}}</div>
-                <div style="font-size: 0.75rem; color: #6b7280;">{{.UserAgent}}</div>
+                <div class="font-size-sm font-weight-500">{{.IPAddress}} {{if eq .Token $.CurrentSession}}{{.T "current_session"}}{{end}}</div>
+                <div class="font-size-xs text-muted">{{.UserAgent}}</div>
             </div>
-            <form action="/settings/revoke-session" method="POST" style="margin: 0;">
+            <form action="/settings/revoke-session" method="POST" class="m-0">
                 <input type="hidden" name="token" value="{{.Token}}">
-                <button type="submit" class="btn secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Завершить</button>
+                <button type="submit" class="btn secondary" class="p-0_25rem-0_5rem font-size-xs">{{.T "revoke_session"}}</button>
             </form>
         </div>
         {{else}}
-        <p style="font-size: 0.875rem; color: #6b7280;">Нет активных сессий.</p>
+        <p class="font-size-sm text-muted">{{.T "no_active_sessions"}}</p>
         {{end}}
 
-        <form action="/settings/revoke-session" method="POST" style="margin-top: 1rem;">
+        <form action="/settings/revoke-session" method="POST" class="mt-1rem">
             <input type="hidden" name="all_except_current" value="true">
-            <button type="submit" class="btn secondary" style="width: 100%;">Завершить все остальные сессии</button>
+            <button type="submit" class="btn secondary" class="w-100">{{.T "revoke_session"}} все остальные сессии</button>
         </form>
     </div>
 
-    <div style="margin-top: 1.5rem;">
+    <div class="mt-1_5rem">
         <form action="/logout" method="POST">
-            <button type="submit" class="btn secondary">Выйти из аккаунта</button>
+            <button type="submit" class="btn secondary">{{.T "logout_button"}}</button>
         </form>
     </div>
 </div>

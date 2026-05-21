@@ -227,7 +227,7 @@ func (tp *JwtTokenProvider) DeleteToken(refreshToken string) error {
 	return nil
 }
 
-func (tp *JwtTokenProvider) GenerateSessionToken(user *domain.User) (string, error) {
+func (tp *JwtTokenProvider) GenerateSessionToken(user *domain.User, ipAddress, userAgent string) (string, error) {
 	claims := TokenClaims{
 		Username: user.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -238,5 +238,15 @@ func (tp *JwtTokenProvider) GenerateSessionToken(user *domain.User) (string, err
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	return token.SignedString(tp.privateKey)
+	tokenString, err := token.SignedString(tp.privateKey)
+	if err != nil {
+		return "", err
+	}
+
+	err = tp.repo.SaveToWhiteList(tokenString, strconv.FormatUint(user.ID, 10), "internal-ui", ipAddress, userAgent)
+	if err != nil {
+		return "", fmt.Errorf("failed to save session token to whitelist: %w", err)
+	}
+
+	return tokenString, nil
 }

@@ -213,7 +213,13 @@ func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	sessionToken, err := h.authService.CreateSessionToken(user)
+	ipAddress := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ipAddress = forwarded
+	}
+	userAgent := r.UserAgent()
+
+	sessionToken, err := h.authService.CreateSessionToken(user, ipAddress, userAgent)
 	if err == nil {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sso_session",
@@ -489,7 +495,13 @@ func (h *AuthHandler) LoginPOSTHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionToken, err := h.authService.CreateSessionToken(user)
+	ipAddress := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ipAddress = forwarded
+	}
+	userAgent := r.UserAgent()
+
+	sessionToken, err := h.authService.CreateSessionToken(user, ipAddress, userAgent)
 	if err == nil {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sso_session",

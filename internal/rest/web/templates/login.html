@@ -3,35 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход - ZenithSSO</title>
+    <title>{{.T "login_page_title"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div class="sso-card">
     <h2>ZenithSSO</h2>
-    <p class="subtitle">Войдите в свой аккаунт</p>
+    <p class="subtitle">{{.T "login_title"}}</p>
 
     {{if .Error}}
-    <div id="error-msg" class="error-message" style="display: block;">{{.Error}}</div>
+    <div id="error-msg" class="error-message" class="display-block">{{.Error}}</div>
     {{else}}
     <div id="error-msg" class="error-message"></div>
     {{end}}
 
     <form action="/login" method="POST">
         <div class="form-group">
-            <label for="username">Имя пользователя</label>
+            <label for="username">{{.T "username"}}</label>
             <input type="text" id="username" name="username" required>
         </div>
 
         <div class="form-group">
-            <label for="password">Пароль</label>
+            <label for="password">{{.T "password"}}</label>
             <input type="password" id="password" name="password" required>
         </div>
 
-        <button type="submit" class="btn">Войти</button>
+        <button type="submit" class="btn">{{.T "login_button"}}</button>
     </form>
-    <p style="margin-top: 1.5rem; font-size: 0.875rem;">
-        Нет аккаунта? <a href="/api/v1/register" style="color: var(--primary-color); text-decoration: none;">Зарегистрироваться</a>
+    <p class="mt-1_5rem font-size-sm">
+        {{.T "no_account"}} <a href="/api/v1/register" class="link-primary">{{.T "register_link"}}</a>
     </p>
 </div>
 </body>

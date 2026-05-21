@@ -68,11 +68,18 @@ func GetLang(r *http.Request) string {
 	return "en" // Default
 }
 
-// Translate returns the translation dictionary for the given request
-func Translate(r *http.Request) map[string]string {
+// Translate returns a translation function for the given request
+func Translate(r *http.Request) func(string) string {
 	lang := GetLang(r)
-	if dict, ok := translations[lang]; ok {
-		return dict
+	dict, ok := translations[lang]
+	if !ok {
+		dict = translations["en"]
 	}
-	return translations["en"]
+
+	return func(key string) string {
+		if val, exists := dict[key]; exists {
+			return val
+		}
+		return key
+	}
 }
