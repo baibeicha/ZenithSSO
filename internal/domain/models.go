@@ -20,8 +20,9 @@ type User struct {
 }
 
 type Scope struct {
-	ID   uint64 `db:"id" json:"id"`
-	Name string `db:"name" json:"name"`
+	ID          uint64 `db:"id" json:"id"`
+	Name        string `db:"name" json:"name"`
+	Description string `db:"description" json:"description"`
 }
 
 type ScopesList []Scope

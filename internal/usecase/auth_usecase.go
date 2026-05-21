@@ -236,7 +236,7 @@ func (s *AuthUsecase) SetUpSuperuser(ctx context.Context, cfg *config.Config) er
 	}
 
 	superuserScope := "root"
-	superuserScopeId, err := s.userRepo.CreateScope(ctx, superuserScope)
+	superuserScopeId, err := s.userRepo.CreateScope(ctx, superuserScope, "Superuser access")
 	if err != nil {
 		return fmt.Errorf("error registering scope '%s': %w", superuserScope, err)
 	}
@@ -267,6 +267,18 @@ func (s *AuthUsecase) SetUpSuperuser(ctx context.Context, cfg *config.Config) er
 
 func (s *AuthUsecase) GetAllUsers(ctx context.Context) ([]domain.User, error) {
 	return s.userRepo.GetAllUsers(ctx)
+}
+
+func (s *AuthUsecase) CreateScope(ctx context.Context, name, description string) (uint64, error) {
+	return s.userRepo.CreateScope(ctx, name, description)
+}
+
+func (s *AuthUsecase) AssignScopeToUser(ctx context.Context, userID, scopeID uint64) error {
+	return s.userRepo.AddScopeToUser(ctx, userID, scopeID)
+}
+
+func (s *AuthUsecase) GetAllScopes(ctx context.Context) ([]domain.Scope, error) {
+	return s.userRepo.GetAllScopes(ctx)
 }
 
 func (s *AuthUsecase) GetUserInfo(ctx context.Context, accessToken string) (*domain.User, error) {
