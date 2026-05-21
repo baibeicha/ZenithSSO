@@ -85,8 +85,15 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router, customDir string) {
 }
 
 func (h *AuthHandler) RegisterGETHandler(w http.ResponseWriter, r *http.Request) {
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
-		"T": Translate(r),
+		"T": tFunc,
 	}
 var buf bytes.Buffer
 	err := h.templates.ExecuteTemplate(&buf, "register.html", data)
@@ -189,9 +196,16 @@ func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"Error": q.Get("error"),
-		"T":     Translate(r),
+		"T":     tFunc,
 	}
 
 var buf bytes.Buffer
@@ -268,8 +282,15 @@ func (h *AuthHandler) ConsentGETHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
-		"T": Translate(r),
+		"T": tFunc,
 	}
 var buf bytes.Buffer
 	err = h.templates.ExecuteTemplate(&buf, "consent.html", data)
@@ -483,9 +504,16 @@ func (h *AuthHandler) LoginGETHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"Error": q.Get("error"),
-		"T":     Translate(r),
+		"T":     tFunc,
 	}
 
 var buf bytes.Buffer
@@ -559,6 +587,13 @@ func (h *AuthHandler) SettingsGETHandler(w http.ResponseWriter, r *http.Request)
 	sessions, _ := h.sessionService.GetUserSessions(r.Context(), user.ID)
 
 	q := r.URL.Query()
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"User":           user,
 		"Error":          q.Get("error"),
@@ -566,7 +601,7 @@ func (h *AuthHandler) SettingsGETHandler(w http.ResponseWriter, r *http.Request)
 		"IsAdmin":        isAdmin,
 		"Sessions":       sessions,
 		"CurrentSession": cookie.Value,
-		"T":              Translate(r),
+		"T":              tFunc,
 	}
 
 var buf bytes.Buffer
@@ -709,12 +744,19 @@ func (h *AuthHandler) AdminGETHandler(w http.ResponseWriter, r *http.Request) {
 	scopes, errScopes := h.authService.GetAllScopes(r.Context())
 
 	q := r.URL.Query()
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"User":   user,
 		"Users":  users,
 		"Scopes": scopes,
 		"Error":  q.Get("error"),
-		"T":      Translate(r),
+		"T":      tFunc,
 	}
 
 	if err != nil || errScopes != nil {
