@@ -4,31 +4,92 @@ package api;
 
 option go_package = "./api";
 
-import "api.proto";
+import "api/proto/api.proto";
 
 service AuthService {
-  rpc Register(RegisterRequest) returns (Status) {}
-  rpc Login(AuthRequest) returns (AuthResponse) {}
-  rpc Validate(Token) returns (Status) {}
-  rpc Logout(Token) returns (Status) {}
+  rpc Token(TokenRequest) returns (TokenResponse) {}
+  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {}
+  rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {}
+  rpc Revoke(RevokeRequest) returns (Status) {}
+  rpc Sessions(SessionsRequest) returns (SessionsResponse) {}
+  rpc RevokeSession(RevokeSessionRequest) returns (Status) {}
 }
 
-message AuthRequest {
-  string Username = 1;
-  string Password = 2;
+message TokenRequest {
+  string grant_type = 1;
+  string code = 2;
+  string client_id = 3;
+  string client_secret = 4;
+  string redirect_uri = 5;
+  string code_verifier = 6;
+  string refresh_token = 7;
 }
 
-message RegisterRequest {
-  string Username = 1;
-  string Email = 2;
-  string Password = 3;
+message TokenResponse {
+  string access_token = 1;
+  string token_type = 2;
+  int32 expires_in = 3;
+  string refresh_token = 4;
+  string id_token = 5;
 }
 
-message AuthResponse {
-  string AccessToken = 1;
-  string RefreshToken = 2;
+message AuthorizeRequest {
+  string response_type = 1;
+  string client_id = 2;
+  string redirect_uri = 3;
+  string scope = 4;
+  string state = 5;
+  string code_challenge = 6;
+  string code_challenge_method = 7;
+  string nonce = 8;
+  string username = 9;
+  string password = 10;
 }
 
-message Token {
-  string Token = 1;
+message AuthorizeResponse {
+  string code = 1;
+  string state = 2;
+  string redirect_to = 3;
+}
+
+message UserInfoRequest {
+  string access_token = 1;
+}
+
+message UserInfoResponse {
+  string sub = 1;
+  string name = 2;
+  string email = 3;
+  string given_name = 4;
+  string family_name = 5;
+  string picture = 6;
+  string locale = 7;
+}
+
+message RevokeRequest {
+  string token = 1;
+  string token_type_hint = 2;
+}
+
+message SessionsRequest {
+  string access_token = 1;
+}
+
+message SessionInfo {
+  string token = 1;
+  string ip_address = 2;
+  string user_agent = 3;
+  string created_at = 4;
+  string expires_at = 5;
+  string client_id = 6;
+}
+
+message SessionsResponse {
+  repeated SessionInfo sessions = 1;
+}
+
+message RevokeSessionRequest {
+  string access_token = 1;
+  string session_token_to_revoke = 2;
+  bool all_except_current = 3;
 }

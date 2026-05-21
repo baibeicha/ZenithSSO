@@ -5,14 +5,17 @@ grpc:
     cert_path: "./certs/server.crt"
     key_path: "./certs/server.key"
 
+sso:
+  issuer: "http://localhost:8080"
+
 server:
+  secured: true
   port: 8080
 
 datasource:
   url: "195.208.118.156:5432"
   db: auth
-  user: user
-  password: password
+
 
 superuser:
   username: admin

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ панель - ZenithSSO</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="sso-card admin-card">
+    <h2>Админ панель</h2>
+    <p class="subtitle">Управление пользователями системы</p>
+
+    {{if .Error}}
+    <div class="error-message" style="display: block;">{{.Error}}</div>
+    {{end}}
+
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Имя пользователя</th>
+                <th>Email</th>
+                <th>Роли/Scopes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Users}}
+            <tr>
+                <td>{{.ID}}</td>
+                <td>{{.Username}}</td>
+                <td>{{.Email}}</td>
+                <td>
+                    {{range .Scopes}}
+                        <span style="background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">{{.Name}}</span>
+                    {{end}}
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="4" style="text-align: center; color: var(--text-muted);">Пользователи не найдены</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 1.5rem; text-align: left;">
+        <a href="/settings" style="color: var(--primary-color); text-decoration: none; font-size: 0.875rem;">&larr; Назад к настройкам</a>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки - ZenithSSO</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="sso-card">
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <div class="avatar-container" style="position: relative; display: inline-block; width: 100px; height: 100px; border-radius: 50%; overflow: hidden; background-color: #f3f4f6; cursor: pointer;">
+            <img id="user-avatar" src="{{if .User.AvatarURL}}{{.User.AvatarURL}}{{else}}/static/img/default-avatar.png{{end}}" alt="User Avatar" style="width: 100%; height: 100%; object-fit: cover;">
+            <div class="avatar-overlay" style="position: absolute; bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); color: white; display: flex; justify-content: center; align-items: center; font-size: 12px; transition: opacity 0.2s; opacity: 0;">
+                Edit
+            </div>
+        </div>
+        <div id="avatar-input-container" style="display: none; margin-top: 10px;">
+            <form action="/settings" method="POST" id="avatar-form">
+                <input type="url" name="avatar_url" id="avatar_url_input" placeholder="Paste image URL here" style="width: 100%; padding: 5px; box-sizing: border-box; font-size: 12px;">
+                <input type="hidden" name="first_name" value="{{if .User.FirstName}}{{.User.FirstName}}{{end}}">
+                <input type="hidden" name="last_name" value="{{if .User.LastName}}{{.User.LastName}}{{end}}">
+                <input type="hidden" name="locale" value="{{if .User.Locale}}{{.User.Locale}}{{end}}">
+                <button type="submit" style="display: none;">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <h2>Настройки профиля</h2>
+    <p class="subtitle">Управление данными аккаунта {{.User.Username}}</p>
+
+    {{if .Error}}
+    <div class="error-message" style="display: block;">{{.Error}}</div>
+    {{end}}
+    {{if .Success}}
+    <div style="color: #16a34a; background: #dcfce7; padding: 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem;">{{.Success}}</div>
+    {{end}}
+
+    {{if .IsAdmin}}
+    <div style="margin-bottom: 1.5rem; text-align: left;"><a href="/admin" style="color: var(--primary-color); text-decoration: none; font-size: 0.875rem;">&rarr; Перейти в Админ панель</a></div>
+    {{end}}
+
+    <form action="/settings" method="POST">
+        <div class="form-group">
+            <label for="first_name">Имя</label>
+            <input type="text" id="first_name" name="first_name" value="{{if .User.FirstName}}{{.User.FirstName}}{{end}}">
+        </div>
+
+        <div class="form-group">
+            <label for="last_name">Фамилия</label>
+            <input type="text" id="last_name" name="last_name" value="{{if .User.LastName}}{{.User.LastName}}{{end}}">
+        </div>
+
+        <div class="form-group" style="display: none;">
+            <label for="avatar_url">URL аватара</label>
+            <input type="url" id="avatar_url" name="avatar_url" value="{{if .User.AvatarURL}}{{.User.AvatarURL}}{{end}}">
+        </div>
+
+        <div class="form-group">
+            <label for="locale">Язык (локаль)</label>
+            <input type="text" id="locale" name="locale" value="{{if .User.Locale}}{{.User.Locale}}{{end}}" placeholder="ru">
+        </div>
+
+        <button type="submit" class="btn">Сохранить</button>
+    </form>
+
+    <div style="margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: 1rem;">
+        <h3>Активные сессии</h3>
+        {{range .Sessions}}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f3f4f6;">
+            <div>
+                <div style="font-size: 0.875rem; font-weight: 500;">{{.IPAddress}} {{if eq .Token $.CurrentSession}}(Текущая){{end}}</div>
+                <div style="font-size: 0.75rem; color: #6b7280;">{{.UserAgent}}</div>
+            </div>
+            <form action="/settings/revoke-session" method="POST" style="margin: 0;">
+                <input type="hidden" name="token" value="{{.Token}}">
+                <button type="submit" class="btn secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Завершить</button>
+            </form>
+        </div>
+        {{else}}
+        <p style="font-size: 0.875rem; color: #6b7280;">Нет активных сессий.</p>
+        {{end}}
+
+        <form action="/settings/revoke-session" method="POST" style="margin-top: 1rem;">
+            <input type="hidden" name="all_except_current" value="true">
+            <button type="submit" class="btn secondary" style="width: 100%;">Завершить все остальные сессии</button>
+        </form>
+    </div>
+
+    <div style="margin-top: 1.5rem;">
+        <form action="/logout" method="POST">
+            <button type="submit" class="btn secondary">Выйти из аккаунта</button>
+        </form>
+    </div>
+</div>
+<script src="/static/js/avatar.js"></script>
+</body>
+</html>

@@ -1,19 +1,21 @@
 package jwt
 
 import (
-	"AuthServer/internal/db"
+	"AuthServer/internal/domain"
 	"context"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 type TokenRepository interface {
-	InBlackList(tokenString string) bool
-	SaveToBlackList(tokenString, userID string) error
+	IsTokenValid(tokenString string) bool
+	SaveToWhiteList(tokenString, userID string, clientID string, ipAddress string, userAgent string) error
+	RevokeToken(tokenString string) error
 	CleanExpiredTokens(ctx context.Context) error
 }
 
@@ -24,17 +26,26 @@ type Tokens struct {
 }
 
 type TokenClaims struct {
-	Username string `json:"username"`
-	Scopes   string `json:"scopes,omitempty"`
+	Username      string `json:"username"`
+	Scopes        string `json:"scopes,omitempty"`
+	AllowedScopes string `json:"allowed_scopes,omitempty"`
 	jwt.RegisteredClaims
 }
 
-func (tp *JwtTokenProvider) GenerateAccess(user *db.User) (string, error) {
+func (tp *JwtTokenProvider) GenerateAccess(user *domain.User, clientID, allowedScopes string) (string, error) {
+	var scopes string
+	if allowedScopes != "" {
+		scopes = user.Scopes.StringFromAllowed(allowedScopes)
+	} else {
+		scopes = user.Scopes.String()
+	}
+
 	claims := TokenClaims{
 		Username: user.Username,
-		Scopes:   user.Scopes.String(),
+		Scopes:   scopes,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    strconv.FormatUint(user.ID, 10),
+			Audience:  jwt.ClaimStrings{clientID},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -44,11 +55,13 @@ func (tp *JwtTokenProvider) GenerateAccess(user *db.User) (string, error) {
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateRefresh(user *db.User) (string, error) {
+func (tp *JwtTokenProvider) GenerateRefresh(user *domain.User, clientID, allowedScopes string) (string, error) {
 	claims := TokenClaims{
-		Username: user.Username,
+		Username:      user.Username,
+		AllowedScopes: allowedScopes,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    strconv.FormatUint(user.ID, 10),
+			Audience:  jwt.ClaimStrings{clientID},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -58,30 +71,68 @@ func (tp *JwtTokenProvider) GenerateRefresh(user *db.User) (string, error) {
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateIdToken(user *db.User, clientID string) (string, error) {
+func (tp *JwtTokenProvider) GenerateIdToken(user *domain.User, clientID string, scopes string, nonce string, issuer string) (string, error) {
 	claims := jwt.MapClaims{
-		"iss":   "http://localhost:8080",
-		"sub":   strconv.FormatUint(user.ID, 10),
-		"aud":   clientID,
-		"exp":   time.Now().Add(tp.accessTTL).Unix(),
-		"iat":   time.Now().Unix(),
-		"name":  user.Username,
-		"email": user.Email,
+		"iss":  issuer,
+		"sub":  strconv.FormatUint(user.ID, 10),
+		"aud":  clientID,
+		"exp":  time.Now().Add(tp.accessTTL).Unix(),
+		"iat":  time.Now().Unix(),
+		"name": user.Username,
+	}
+
+	if nonce != "" {
+		claims["nonce"] = nonce
+	}
+
+	hasEmail := false
+	hasProfile := false
+	for _, scope := range strings.Split(scopes, " ") {
+		if scope == "email" {
+			hasEmail = true
+		} else if scope == "profile" {
+			hasProfile = true
+		}
+	}
+
+	if hasEmail {
+		claims["email"] = user.Email
+	}
+
+	if hasProfile {
+		if user.FirstName != nil {
+			claims["given_name"] = *user.FirstName
+		}
+		if user.LastName != nil {
+			claims["family_name"] = *user.LastName
+		}
+		if user.AvatarURL != nil {
+			claims["picture"] = *user.AvatarURL
+		}
+		if user.Locale != nil {
+			claims["locale"] = *user.Locale
+		}
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	return token.SignedString(tp.privateKey)
 }
 
-func (tp *JwtTokenProvider) GenerateTokens(user *db.User) (*Tokens, error) {
-	accessToken, err := tp.GenerateAccess(user)
+func (tp *JwtTokenProvider) GenerateTokens(user *domain.User, clientID, scopes string, ipAddress, userAgent string) (*Tokens, error) {
+	accessToken, err := tp.GenerateAccess(user, clientID, scopes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := tp.GenerateRefresh(user)
+	refreshToken, err := tp.GenerateRefresh(user, clientID, scopes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	// Add the generated refresh token to the whitelist
+	err = tp.repo.SaveToWhiteList(refreshToken, strconv.FormatUint(user.ID, 10), clientID, ipAddress, userAgent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save refresh token to whitelist: %w", err)
 	}
 
 	return &Tokens{
@@ -106,14 +157,14 @@ func (tp *JwtTokenProvider) VerifyToken(tokenString string) (bool, error) {
 		return false, err
 	}
 
-	if tp.repo.InBlackList(tokenString) {
-		return false, errors.New("token is in blacklist")
+	if !tp.repo.IsTokenValid(tokenString) {
+		return false, errors.New("token is not valid or has been revoked")
 	}
 
 	return token.Valid, nil
 }
 
-func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *db.User) (*Tokens, error) {
+func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *domain.User, clientID string, ipAddress, userAgent string) (*Tokens, error) {
 	isValid, err := tp.VerifyToken(refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
@@ -122,15 +173,28 @@ func (tp *JwtTokenProvider) RefreshToken(refreshToken string, user *db.User) (*T
 		return nil, errors.New("refresh token is not valid")
 	}
 
-	accessToken, err := tp.GenerateAccess(user)
+	var claims TokenClaims
+	_, err = jwt.ParseWithClaims(refreshToken, &claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signature algorithm: %v", t.Header["alg"])
+		}
+		return tp.publicKey, nil
+	})
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid refresh token: %w", err)
 	}
 
-	return &Tokens{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	}, nil
+	// Verify the refresh token was issued to this client
+	if len(claims.Audience) == 0 || claims.Audience[0] != clientID {
+		return nil, fmt.Errorf("refresh token was not issued to this client")
+	}
+
+	// Invalidate old token (Revoke)
+	_ = tp.repo.RevokeToken(refreshToken)
+
+	// Generate a completely new set of tokens (rolling refresh token)
+	return tp.GenerateTokens(user, clientID, claims.AllowedScopes, ipAddress, userAgent)
 }
 
 func (tp *JwtTokenProvider) DeleteToken(refreshToken string) error {
@@ -155,10 +219,24 @@ func (tp *JwtTokenProvider) DeleteToken(refreshToken string) error {
 		return errors.New("failed to get user ID from token")
 	}
 
-	err = tp.repo.SaveToBlackList(refreshToken, userID)
+	err = tp.repo.RevokeToken(refreshToken)
 	if err != nil {
-		return fmt.Errorf("error saving token to blacklist: %w", err)
+		return fmt.Errorf("error revoking token: %w", err)
 	}
 
 	return nil
+}
+
+func (tp *JwtTokenProvider) GenerateSessionToken(user *domain.User) (string, error) {
+	claims := TokenClaims{
+		Username: user.Username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    strconv.FormatUint(user.ID, 10),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(tp.privateKey)
 }

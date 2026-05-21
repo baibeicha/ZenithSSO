@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS clients
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id          VARCHAR(255) UNIQUE NOT NULL,
     client_secret_hash VARCHAR(255)        NOT NULL,
-    redirect_uris      JSONB               NOT NULL
+    redirect_uris      JSONB               NOT NULL,
+    allowed_scopes     JSONB               NOT NULL DEFAULT '[]'::jsonb
 );
 
 CREATE INDEX idx_clients_client_id ON clients (client_id);
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS auth_codes
     redirect_uri          TEXT         NOT NULL,
     code_challenge        VARCHAR(255) NOT NULL,
     code_challenge_method VARCHAR(50)  NOT NULL,
+    scopes                TEXT         NOT NULL,
     expires_at            TIMESTAMP    NOT NULL
 );
 
