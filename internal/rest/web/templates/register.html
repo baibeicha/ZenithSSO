@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.T "register_page_title"}} - ZenithSSO</title>
+    <title>{{call .T "register_page_title"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div class="sso-card">
-    <h2>{{.T "register_heading"}}</h2>
-    <p class="subtitle">{{.T "register_title"}}</p>
+    <h2>{{call .T "register_heading"}}</h2>
+    <p class="subtitle">{{call .T "register_title"}}</p>
 
     <div id="error-msg" class="error-message"></div>
     <div id="success-msg"
@@ -17,7 +17,7 @@
 
     <form id="register-form">
         <div class="form-group">
-            <label for="username">{{.T "username"}}</label>
+            <label for="username">{{call .T "username"}}</label>
             <input type="text" id="username" name="username" required>
         </div>
 
@@ -27,16 +27,16 @@
         </div>
 
         <div class="form-group">
-            <label for="password">{{.T "password"}}</label>
+            <label for="password">{{call .T "password"}}</label>
             <input type="password" id="password" name="password" required>
         </div>
 
-        <button type="submit" class="btn">{{.T "register_button"}}</button>
+        <button type="submit" class="btn">{{call .T "register_button"}}</button>
     </form>
 
     <p class="mt-1_5rem font-size-sm">
-        {{.T "already_have_account"}} <a href="/login" id="login-link"
-                             class="link-primary">{{.T "login_link"}}</a>
+        {{call .T "already_have_account"}} <a href="/login" id="login-link"
+                             class="link-primary">{{call .T "login_link"}}</a>
     </p>
 </div>
 <script src="/static/js/register.js"></script>

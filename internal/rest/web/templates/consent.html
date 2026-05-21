@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.T "consent_page_title"}} - ZenithSSO</title>
+    <title>{{call .T "consent_page_title"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div class="sso-card">
-    <h2>{{.T "consent_title"}}</h2>
-    <p class="subtitle">{{.T "consent_message_part1"}} <strong id="app-name" class="text-dark">[Client App]</strong> {{.T "consent_message_part2"}}</p>
+    <h2>{{call .T "consent_title"}}</h2>
+    <p class="subtitle">{{call .T "consent_message_part1"}} <strong id="app-name" class="text-dark">[Client App]</strong> {{call .T "consent_message_part2"}}</p>
 
     <div class="scopes-box">
-        <p class="m-0 font-weight-500">{{.T "consent_permissions"}}</p>
+        <p class="m-0 font-weight-500">{{call .T "consent_permissions"}}</p>
         <ul id="scopes-list">
         </ul>
     </div>
@@ -20,8 +20,8 @@
     <form action="/api/v1/consent" method="POST">
         <div id="hidden_oauth_params"></div>
 
-        <button type="submit" class="btn">{{.T "authorize_button"}}</button>
-        <button type="button" class="btn secondary" onclick="history.back()">{{.T "deny_button"}}</button>
+        <button type="submit" class="btn">{{call .T "authorize_button"}}</button>
+        <button type="button" class="btn secondary" onclick="history.back()">{{call .T "deny_button"}}</button>
     </form>
 </div>
 <script src="/static/js/consent.js"></script>

@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.T "login_page_title"}} - ZenithSSO</title>
+    <title>{{call .T "login_page_title"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div class="sso-card">
     <h2>ZenithSSO</h2>
-    <p class="subtitle">{{.T "login_title"}}</p>
+    <p class="subtitle">{{call .T "login_title"}}</p>
 
     {{if .Error}}
     <div id="error-msg" class="error-message" class="display-block">{{.Error}}</div>
@@ -19,19 +19,19 @@
 
     <form action="/login" method="POST">
         <div class="form-group">
-            <label for="username">{{.T "username"}}</label>
+            <label for="username">{{call .T "username"}}</label>
             <input type="text" id="username" name="username" required>
         </div>
 
         <div class="form-group">
-            <label for="password">{{.T "password"}}</label>
+            <label for="password">{{call .T "password"}}</label>
             <input type="password" id="password" name="password" required>
         </div>
 
-        <button type="submit" class="btn">{{.T "login_button"}}</button>
+        <button type="submit" class="btn">{{call .T "login_button"}}</button>
     </form>
     <p class="mt-1_5rem font-size-sm">
-        {{.T "no_account"}} <a href="/api/v1/register" class="link-primary">{{.T "register_link"}}</a>
+        {{call .T "no_account"}} <a href="/api/v1/register" class="link-primary">{{call .T "register_link"}}</a>
     </p>
 </div>
 </body>

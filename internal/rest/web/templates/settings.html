@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.T "settings_page_title"}} - ZenithSSO</title>
+    <title>{{call .T "settings_page_title"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -26,8 +26,8 @@
         </div>
     </div>
 
-    <h2>{{.T "settings_heading"}}</h2>
-    <p class="subtitle">{{.T "settings_subtitle"}} {{.User.Username}}</p>
+    <h2>{{call .T "settings_heading"}}</h2>
+    <p class="subtitle">{{call .T "settings_subtitle"}} {{.User.Username}}</p>
 
     {{if .Error}}
     <div class="error-message" class="display-block">{{.Error}}</div>
@@ -37,59 +37,59 @@
     {{end}}
 
     {{if .IsAdmin}}
-    <div class="mb-1_5rem text-left"><a href="/admin" class="link-primary font-size-sm">&rarr; {{.T "go_to_admin"}}</a></div>
+    <div class="mb-1_5rem text-left"><a href="/admin" class="link-primary font-size-sm">&rarr; {{call .T "go_to_admin"}}</a></div>
     {{end}}
 
     <form action="/settings" method="POST">
         <div class="form-group">
-            <label for="first_name">{{.T "first_name"}}</label>
+            <label for="first_name">{{call .T "first_name"}}</label>
             <input type="text" id="first_name" name="first_name" value="{{if .User.FirstName}}{{.User.FirstName}}{{end}}">
         </div>
 
         <div class="form-group">
-            <label for="last_name">{{.T "last_name"}}</label>
+            <label for="last_name">{{call .T "last_name"}}</label>
             <input type="text" id="last_name" name="last_name" value="{{if .User.LastName}}{{.User.LastName}}{{end}}">
         </div>
 
         <div class="form-group" class="display-none">
-            <label for="avatar_url">{{.T "avatar_url"}}</label>
+            <label for="avatar_url">{{call .T "avatar_url"}}</label>
             <input type="url" id="avatar_url" name="avatar_url" value="{{if .User.AvatarURL}}{{.User.AvatarURL}}{{end}}">
         </div>
 
         <div class="form-group">
-            <label for="locale">{{.T "locale_label"}}</label>
+            <label for="locale">{{call .T "locale_label"}}</label>
             <input type="text" id="locale" name="locale" value="{{if .User.Locale}}{{.User.Locale}}{{end}}" placeholder="ru">
         </div>
 
-        <button type="submit" class="btn">{{.T "save_button"}}</button>
+        <button type="submit" class="btn">{{call .T "save_button"}}</button>
     </form>
 
     <div class="mt-2rem border-top pt-1rem">
-        <h3>{{.T "active_sessions"}}</h3>
+        <h3>{{call .T "active_sessions"}}</h3>
         {{range .Sessions}}
         <div class="display-flex justify-between align-center p-0_5rem-0 border-bottom">
             <div>
-                <div class="font-size-sm font-weight-500">{{.IPAddress}} {{if eq .Token $.CurrentSession}}{{.T "current_session"}}{{end}}</div>
+                <div class="font-size-sm font-weight-500">{{.IPAddress}} {{if eq .Token $.CurrentSession}}{{call .T "current_session"}}{{end}}</div>
                 <div class="font-size-xs text-muted">{{.UserAgent}}</div>
             </div>
             <form action="/settings/revoke-session" method="POST" class="m-0">
                 <input type="hidden" name="token" value="{{.Token}}">
-                <button type="submit" class="btn secondary" class="p-0_25rem-0_5rem font-size-xs">{{.T "revoke_session"}}</button>
+                <button type="submit" class="btn secondary" class="p-0_25rem-0_5rem font-size-xs">{{call .T "revoke_session"}}</button>
             </form>
         </div>
         {{else}}
-        <p class="font-size-sm text-muted">{{.T "no_active_sessions"}}</p>
+        <p class="font-size-sm text-muted">{{call .T "no_active_sessions"}}</p>
         {{end}}
 
         <form action="/settings/revoke-session" method="POST" class="mt-1rem">
             <input type="hidden" name="all_except_current" value="true">
-            <button type="submit" class="btn secondary" class="w-100">{{.T "revoke_session"}} все остальные сессии</button>
+            <button type="submit" class="btn secondary" class="w-100">{{call .T "revoke_session"}} все остальные сессии</button>
         </form>
     </div>
 
     <div class="mt-1_5rem">
         <form action="/logout" method="POST">
-            <button type="submit" class="btn secondary">{{.T "logout_button"}}</button>
+            <button type="submit" class="btn secondary">{{call .T "logout_button"}}</button>
         </form>
     </div>
 </div>
