@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Запрос доступа - ZenithSSO</title>
+    <title>{{call .T "consent_page_title"}} - ZenithSSO</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <div class="sso-card">
-    <h2>Подтверждение доступа</h2>
-    <p class="subtitle">Приложение <strong id="app-name" style="color: #111;">[Client App]</strong> запрашивает доступ к
-        вашим данным.</p>
+    <h2>{{call .T "consent_title"}}</h2>
+    <p class="subtitle">{{call .T "consent_message_part1"}} <strong id="app-name" class="text-dark">[Client App]</strong> {{call .T "consent_message_part2"}}</p>
 
     <div class="scopes-box">
-        <p style="margin-top: 0; font-weight: 500;">Разрешения:</p>
+        <p class="m-0 font-weight-500">{{call .T "consent_permissions"}}</p>
         <ul id="scopes-list">
         </ul>
     </div>
@@ -21,8 +20,8 @@
     <form action="/api/v1/consent" method="POST">
         <div id="hidden_oauth_params"></div>
 
-        <button type="submit" class="btn">Разрешить доступ</button>
-        <button type="button" class="btn secondary" onclick="history.back()">Отмена</button>
+        <button type="submit" class="btn">{{call .T "authorize_button"}}</button>
+        <button type="button" class="btn secondary" onclick="history.back()">{{call .T "deny_button"}}</button>
     </form>
 </div>
 <script src="/static/js/consent.js"></script>

@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"bytes"
+	"log/slog"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -83,13 +85,24 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router, customDir string) {
 }
 
 func (h *AuthHandler) RegisterGETHandler(w http.ResponseWriter, r *http.Request) {
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
-		"T": Translate(r),
+		"T": tFunc,
 	}
-	err := h.templates.ExecuteTemplate(w, "register.html", data)
+var buf bytes.Buffer
+	err := h.templates.ExecuteTemplate(&buf, "register.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) DiscoveryHandler(w http.ResponseWriter, r *http.Request) {
@@ -183,15 +196,26 @@ func (h *AuthHandler) AuthorizeGETHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"Error": q.Get("error"),
-		"T":     Translate(r),
+		"T":     tFunc,
 	}
 
-	err = h.templates.ExecuteTemplate(w, "authorize.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "authorize.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +237,13 @@ func (h *AuthHandler) AuthorizePOSTHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	sessionToken, err := h.authService.CreateSessionToken(user)
+	ipAddress := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ipAddress = forwarded
+	}
+	userAgent := r.UserAgent()
+
+	sessionToken, err := h.authService.CreateSessionToken(user, ipAddress, userAgent)
 	if err == nil {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sso_session",
@@ -252,13 +282,24 @@ func (h *AuthHandler) ConsentGETHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
-		"T": Translate(r),
+		"T": tFunc,
 	}
-	err = h.templates.ExecuteTemplate(w, "consent.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "consent.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) ConsentPOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -463,15 +504,26 @@ func (h *AuthHandler) LoginGETHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"Error": q.Get("error"),
-		"T":     Translate(r),
+		"T":     tFunc,
 	}
 
-	err = h.templates.ExecuteTemplate(w, "login.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "login.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) LoginPOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -489,7 +541,13 @@ func (h *AuthHandler) LoginPOSTHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionToken, err := h.authService.CreateSessionToken(user)
+	ipAddress := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ipAddress = forwarded
+	}
+	userAgent := r.UserAgent()
+
+	sessionToken, err := h.authService.CreateSessionToken(user, ipAddress, userAgent)
 	if err == nil {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sso_session",
@@ -529,6 +587,13 @@ func (h *AuthHandler) SettingsGETHandler(w http.ResponseWriter, r *http.Request)
 	sessions, _ := h.sessionService.GetUserSessions(r.Context(), user.ID)
 
 	q := r.URL.Query()
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"User":           user,
 		"Error":          q.Get("error"),
@@ -536,13 +601,17 @@ func (h *AuthHandler) SettingsGETHandler(w http.ResponseWriter, r *http.Request)
 		"IsAdmin":        isAdmin,
 		"Sessions":       sessions,
 		"CurrentSession": cookie.Value,
-		"T":              Translate(r),
+		"T":              tFunc,
 	}
 
-	err = h.templates.ExecuteTemplate(w, "settings.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "settings.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) RevokeSessionPOSTHandler(w http.ResponseWriter, r *http.Request) {
@@ -675,22 +744,33 @@ func (h *AuthHandler) AdminGETHandler(w http.ResponseWriter, r *http.Request) {
 	scopes, errScopes := h.authService.GetAllScopes(r.Context())
 
 	q := r.URL.Query()
+	tDict := Translate(r)
+	tFunc := func(key string) string {
+		if val, exists := tDict[key]; exists {
+			return val
+		}
+		return key
+	}
 	data := map[string]interface{}{
 		"User":   user,
 		"Users":  users,
 		"Scopes": scopes,
 		"Error":  q.Get("error"),
-		"T":      Translate(r),
+		"T":      tFunc,
 	}
 
 	if err != nil || errScopes != nil {
 		data["Error"] = "Failed to load data"
 	}
 
-	err = h.templates.ExecuteTemplate(w, "admin.html", data)
+var buf bytes.Buffer
+	err = h.templates.ExecuteTemplate(&buf, "admin.html", data)
 	if err != nil {
+		slog.Error("template execution error", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+	buf.WriteTo(w)
 }
 
 func (h *AuthHandler) checkAdminAccess(r *http.Request) bool {

@@ -52,8 +52,8 @@ func (s *AuthUsecase) ValidateUser(ctx context.Context, username, password strin
 	return user, nil
 }
 
-func (s *AuthUsecase) CreateSessionToken(user *domain.User) (string, error) {
-	return s.tokenProvider.GenerateSessionToken(user)
+func (s *AuthUsecase) CreateSessionToken(user *domain.User, ipAddress, userAgent string) (string, error) {
+	return s.tokenProvider.GenerateSessionToken(user, ipAddress, userAgent)
 }
 
 func (s *AuthUsecase) GenerateAuthorizationCodeForUser(ctx context.Context, userID uint64, clientID, redirectURI, codeChallenge, codeChallengeMethod, requestedScopes, nonce string) (string, error) {
