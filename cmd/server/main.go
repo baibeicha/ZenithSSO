@@ -122,7 +122,7 @@ func main() {
 
 	server := grpcPkg.NewServer(opts...)
 
-	grpcHandler := grpcDelivery.NewAuthHandler(authService)
+	grpcHandler := grpcDelivery.NewAuthHandler(authService, sessionService)
 	api.RegisterAuthServiceServer(server, grpcHandler)
 
 	go func() {

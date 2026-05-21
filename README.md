@@ -1,87 +1,82 @@
-# ZenithSSO - High Performance Identity Provider 🛡️
+# ZenithSSO
 
-*Read this in other languages: [English](README.md), [Русский](README_ru.md).*
+ZenithSSO is a highly customizable Identity Provider (IdP) written in Go, following Clean Architecture principles. It implements OAuth2/OIDC standards, providing both REST API and gRPC interfaces for seamless integration.
 
-![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+## Configuration Reference (`config.yaml`)
 
-ZenithSSO is a highly scalable, high-performance Identity Provider (IdP) written in Go. Built with Clean Architecture principles, it provides a robust Single Sign-On (SSO) solution implementing OpenID Connect (OIDC) and OAuth 2.0 with PKCE out-of-the-box.
+| Parameter | Description | Default / Example |
+| :--- | :--- | :--- |
+| `grpc.port` | Port for the gRPC server | `50051` |
+| `grpc.tls.enabled` | Enable TLS for gRPC | `true` |
+| `grpc.tls.cert_path` | Path to TLS certificate | `./certs/server.crt` |
+| `grpc.tls.key_path` | Path to TLS private key | `./certs/server.key` |
+| `sso.issuer` | The base URL of the Identity Provider | `http://localhost:8080` |
+| `server.secured` | Whether to use secure cookies (requires HTTPS) | `true` |
+| `server.port` | Port for the HTTP server | `8080` |
+| `datasource.url` | PostgreSQL database connection URL | `195.208.118.156:5432` |
+| `datasource.db` | PostgreSQL database name | `auth` |
+| `superuser.username` | Initial admin username | `admin` |
+| `superuser.email` | Initial admin email | `admin@admin.com` |
+| `superuser.password` | Initial admin password | `password` |
+| `jwt.ttl.access` | Time-to-live for access tokens | `1` |
+| `jwt.ttl.refresh` | Time-to-live for refresh tokens | `15` |
+| `jwt.ttl.unit` | Time unit for TTL (`s`, `m`, `h`) | `m` |
+| `jwt.cleanup.interval` | Interval for cleaning up expired tokens | `5` |
+| `jwt.cleanup.unit` | Time unit for cleanup interval | `m` |
+| `jwt.private_key_path` | Path to RSA private key for signing JWTs | `certs/private.pem` |
+| `jwt.public_key_path` | Path to RSA public key for verifying JWTs | `certs/public.pem` |
+| `ui.custom_dir` | (Optional) Path to a custom UI directory to override the embedded frontend. | `/path/to/custom/web` |
 
-## ✨ Key Features
+## Endpoints Reference
 
-*   **OAuth 2.0 & OIDC Standard Compliant:** Supports Authorization Code grant with strict PKCE (`S256` and `plain`) validation.
-*   **Secure OIDC Profile:** Complete support for dynamic Issuer binding, conditional ID tokens with `nonce` validation, and standardized profile scopes (`first_name`, `last_name`, `avatar_url`, `locale`).
-*   **Strict Client Authentication:** Securely enforce basic authentication or POST body `client_secret` hashing for secure token exchanges.
-*   **Whitelist Refresh Tokens:** Secure session management leveraging database-backed whitelisting mapping `ip_address` and `user_agent` to enable features like "Revoke All Sessions".
-*   **White-labeling & Extensible UI:** A fast UI embedded into the binary using `go:embed`. Highly customizable using a fallback system (`fs.FS`)—drop your own `web/` folder locally to dynamically override any template or static asset!
-*   **Internationalization (i18n):** Native multilingual interface supporting English and Russian, automatically adapting via URL (`?lang=ru`) or the `Accept-Language` browser header.
-*   **gRPC & REST APIs:** Headless authentication options using either REST endpoints or high-performance gRPC protobufs.
+### REST API Endpoints
+* `GET /.well-known/openid-configuration` - OIDC Discovery endpoint.
+* `GET /api/v1/jwks` - Returns public keys for token verification.
+* `POST /api/v1/register` - Register a new user account.
+* `GET /api/v1/userinfo` - Get details of the authenticated user.
+* `POST /api/v1/token` - Token exchange (authorization code, refresh token, password grants).
+* `GET /api/v1/authorize` - Initiates the OAuth2 authorization flow.
+* `POST /api/v1/authorize` - Processes user login during authorization flow.
+* `GET /api/v1/consent` - Prompts user for consent.
+* `POST /api/v1/consent` - Processes user consent.
 
-## 🔄 Authorization Code Flow (with PKCE)
+### UI Routes
+* `GET /login`, `POST /login` - Standalone user login.
+* `POST /logout` - User logout.
+* `GET /settings`, `POST /settings` - User profile and session management.
+* `POST /settings/revoke-session` - Revokes a specific session.
+* `GET /admin` - Admin panel for managing users and roles.
+* `POST /admin/scopes` - Create a new role (scope).
+* `POST /admin/users/scopes` - Assign a role to a user.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Client
-    participant ZenithSSO
+### gRPC Service (`AuthService`)
+Defined in `api/proto/auth.proto`.
+* `rpc Token` - Token exchange operations.
+* `rpc Authorize` - Headless authorization for trusted clients.
+* `rpc UserInfo` - Retrieve user information.
+* `rpc Revoke` - Revoke an access or refresh token.
+* `rpc Sessions` - List active sessions for a user.
+* `rpc RevokeSession` - Revoke a specific session or all except current.
 
-    User->>Client: Click Login
-    Client->>ZenithSSO: Redirect to /api/v1/authorize?response_type=code&client_id=...&code_challenge=...&code_challenge_method=S256
-    ZenithSSO->>User: Display Login/Consent Page
-    User->>ZenithSSO: Enter Credentials & Approve
-    ZenithSSO->>Client: Redirect to redirect_uri?code=AUTH_CODE
-    Client->>ZenithSSO: POST /api/v1/token (with code, client_secret, and code_verifier)
-    ZenithSSO->>ZenithSSO: Validate PKCE & Secret
-    ZenithSSO->>Client: Return access_token, id_token, refresh_token
-```
+## Customizing the UI
 
-## 🚀 Quick Start
+ZenithSSO comes with a built-in embedded UI. However, you can easily override the HTML templates and static assets (CSS/JS) without recompiling the application.
 
-### 1. Configuration (`config.yaml`)
+1. **Create your custom directory structure:**
+   Create a folder anywhere on your server, e.g., `/opt/zenithsso/custom_ui`. Inside it, create two subdirectories: `templates` and `static`.
+   ```bash
+   mkdir -p custom_ui/templates
+   mkdir -p custom_ui/static/css
+   ```
 
-```yaml
-sso:
-  issuer: "http://localhost:8080"
-server:
-  secured: false
-  port: 8080
-datasource:
-  url: "localhost:5432"
-  db: "auth"
-  user: "user"
-  password: "password"
-ui:
-  custom_dir: "./custom_web" # Optional path to override UI
-jwt:
-  private_key_path: "certs/private.pem"
-  public_key_path: "certs/public.pem"
-```
+2. **Add your custom files:**
+   Place your modified HTML files in `templates/` (e.g., `login.html`, `admin.html`). Place your CSS files in `static/css/` (e.g., `style.css`). Make sure you retain the specific filenames expected by the server.
 
-### 2. Run the server
-Generate RSA keys in `certs/` and start your server:
-```bash
-go run ./cmd/server
-```
+3. **Update `config.yaml`:**
+   Point the server to your new directory using the `ui.custom_dir` parameter:
+   ```yaml
+   ui:
+     custom_dir: "/opt/zenithsso/custom_ui"
+   ```
 
-## 📚 API Examples
-
-### Fetch Tokens
-```bash
-curl -X POST http://localhost:8080/api/v1/token \
-  -d "grant_type=authorization_code" \
-  -d "code=YOUR_CODE" \
-  -d "client_id=test_client" \
-  -d "client_secret=secret123" \
-  -d "redirect_uri=http://localhost/callback" \
-  -d "code_verifier=YOUR_PKCE_VERIFIER"
-```
-
-### Get User Info
-```bash
-curl -X GET http://localhost:8080/api/v1/userinfo \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-*If granted the `profile` scope, returns `given_name`, `family_name`, `picture`, and `locale`!*
-
----
-Made with ❤️ by standard Go packages.
+When restarted, ZenithSSO will serve your custom files instead of the embedded ones!

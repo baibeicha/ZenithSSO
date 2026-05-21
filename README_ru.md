@@ -1,87 +1,82 @@
-# ZenithSSO - Высокопроизводительный Identity Provider 🛡️
+# ZenithSSO
 
-*Читать на других языках: [English](README.md), [Русский](README_ru.md).*
+ZenithSSO — это легко настраиваемый провайдер аутентификации (Identity Provider, IdP), написанный на Go с использованием принципов чистой архитектуры. Он реализует стандарты OAuth2/OIDC и предоставляет интерфейсы REST API и gRPC для удобной интеграции.
 
-![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+## Справочник по конфигурации (`config.yaml`)
 
-ZenithSSO — это легко масштабируемый и высокопроизводительный Identity Provider (IdP), написанный на Go. Построенный на принципах чистой архитектуры (Clean Architecture), он предоставляет надежное решение для единого входа (SSO) с полной поддержкой OpenID Connect (OIDC) и OAuth 2.0 с PKCE.
+| Параметр | Описание | По умолчанию / Пример |
+| :--- | :--- | :--- |
+| `grpc.port` | Порт для gRPC сервера | `50051` |
+| `grpc.tls.enabled` | Включить TLS для gRPC | `true` |
+| `grpc.tls.cert_path` | Путь к TLS сертификату | `./certs/server.crt` |
+| `grpc.tls.key_path` | Путь к закрытому ключу TLS | `./certs/server.key` |
+| `sso.issuer` | Базовый URL провайдера (Identity Provider) | `http://localhost:8080` |
+| `server.secured` | Использовать безопасные cookies (требует HTTPS) | `true` |
+| `server.port` | Порт для HTTP сервера | `8080` |
+| `datasource.url` | URL подключения к базе данных PostgreSQL | `195.208.118.156:5432` |
+| `datasource.db` | Имя базы данных PostgreSQL | `auth` |
+| `superuser.username` | Имя начального администратора | `admin` |
+| `superuser.email` | Email начального администратора | `admin@admin.com` |
+| `superuser.password` | Пароль начального администратора | `password` |
+| `jwt.ttl.access` | Время жизни access токенов (TTL) | `1` |
+| `jwt.ttl.refresh` | Время жизни refresh токенов | `15` |
+| `jwt.ttl.unit` | Единица измерения времени для TTL (`s`, `m`, `h`) | `m` |
+| `jwt.cleanup.interval` | Интервал очистки истекших токенов | `5` |
+| `jwt.cleanup.unit` | Единица измерения времени для интервала | `m` |
+| `jwt.private_key_path` | Путь к закрытому ключу RSA для подписи JWT | `certs/private.pem` |
+| `jwt.public_key_path` | Путь к открытому ключу RSA для проверки JWT | `certs/public.pem` |
+| `ui.custom_dir` | (Опционально) Путь к пользовательской директории UI для переопределения встроенного фронтенда. | `/path/to/custom/web` |
 
-## ✨ Основные возможности
+## Список эндпоинтов
 
-*   **OAuth 2.0 и OIDC:** Поддержка Authorization Code flow со строгой валидацией PKCE (`S256` и `plain`).
-*   **OIDC Profile Claims:** Динамическая привязка `issuer`, условная генерация ID токена (при наличии `openid` scope) с поддержкой `nonce` и стандартизированного профиля (`first_name`, `last_name`, `avatar_url`, `locale`).
-*   **Строгая Аутентификация Клиентов:** Обязательная проверка `client_secret` (через Basic Auth или POST body) с безопасным хэшированием (bcrypt) при обмене токенов.
-*   **Белый список Refresh-токенов:** Безопасное управление сессиями на базе БД (Whitelist). Мы отслеживаем `ip_address` и `user_agent`, что позволяет реализовывать такие фичи, как "Завершить все активные сеансы".
-*   **White-labeling и Кастомизация UI:** Быстрый пользовательский интерфейс, встроенный прямо в бинарник через `go:embed`. Хотите свой дизайн? Используйте механизм Fallback (через параметр `ui.custom_dir` или локальную папку `web/`) — сервер автоматически подхватит ваши шаблоны!
-*   **Мультиязычность (i18n):** Нативный многоязычный интерфейс (Английский и Русский). Язык адаптируется автоматически через URL (`?lang=ru`) или HTTP-заголовок `Accept-Language`.
-*   **gRPC & REST API:** Работайте с сервисом как через классический REST, так и через высокопроизводительные gRPC protobufs.
+### REST API Эндпоинты
+* `GET /.well-known/openid-configuration` - Эндпоинт OIDC Discovery.
+* `GET /api/v1/jwks` - Возвращает открытые ключи для проверки токенов.
+* `POST /api/v1/register` - Регистрация нового аккаунта пользователя.
+* `GET /api/v1/userinfo` - Получение информации об аутентифицированном пользователе.
+* `POST /api/v1/token` - Обмен токенов (authorization code, refresh token, password grants).
+* `GET /api/v1/authorize` - Запуск процесса авторизации OAuth2.
+* `POST /api/v1/authorize` - Обработка входа пользователя во время авторизации.
+* `GET /api/v1/consent` - Запрос согласия у пользователя.
+* `POST /api/v1/consent` - Обработка согласия пользователя.
 
-## 🔄 Authorization Code Flow (с PKCE)
+### UI Маршруты
+* `GET /login`, `POST /login` - Отдельная страница входа пользователя.
+* `POST /logout` - Выход пользователя.
+* `GET /settings`, `POST /settings` - Управление профилем и сессиями пользователя.
+* `POST /settings/revoke-session` - Отзыв определенной сессии.
+* `GET /admin` - Админ-панель для управления пользователями и ролями.
+* `POST /admin/scopes` - Создать новую роль (scope).
+* `POST /admin/users/scopes` - Назначить роль пользователю.
 
-```mermaid
-sequenceDiagram
-    participant User as Пользователь
-    participant Client as Клиент
-    participant ZenithSSO
+### gRPC Сервис (`AuthService`)
+Определен в `api/proto/auth.proto`.
+* `rpc Token` - Операции обмена токенов.
+* `rpc Authorize` - Headless авторизация для доверенных клиентов.
+* `rpc UserInfo` - Получение информации о пользователе.
+* `rpc Revoke` - Отзыв access или refresh токена.
+* `rpc Sessions` - Список активных сессий пользователя.
+* `rpc RevokeSession` - Отзыв определенной сессии или всех, кроме текущей.
 
-    User->>Client: Нажимает "Войти"
-    Client->>ZenithSSO: Редирект на /api/v1/authorize?response_type=code&client_id=...&code_challenge=...
-    ZenithSSO->>User: Показывает страницу логина/согласия
-    User->>ZenithSSO: Вводит данные и разрешает доступ
-    ZenithSSO->>Client: Редирект на redirect_uri?code=AUTH_CODE
-    Client->>ZenithSSO: POST /api/v1/token (передает code, client_secret и code_verifier)
-    ZenithSSO->>ZenithSSO: Валидация PKCE и Секрета
-    ZenithSSO->>Client: Возвращает access_token, id_token, refresh_token
-```
+## Кастомизация UI (Пользовательский интерфейс)
 
-## 🚀 Быстрый старт
+ZenithSSO поставляется со встроенным пользовательским интерфейсом. Тем не менее, вы можете легко переопределить HTML-шаблоны и статические файлы (CSS/JS) без перекомпиляции приложения.
 
-### 1. Конфигурация (`config.yaml`)
+1. **Создайте структуру директорий:**
+   Создайте папку в любом месте на сервере, например, `/opt/zenithsso/custom_ui`. Внутри создайте две поддиректории: `templates` и `static`.
+   ```bash
+   mkdir -p custom_ui/templates
+   mkdir -p custom_ui/static/css
+   ```
 
-```yaml
-sso:
-  issuer: "http://localhost:8080"
-server:
-  secured: false
-  port: 8080
-datasource:
-  url: "localhost:5432"
-  db: "auth"
-  user: "user"
-  password: "password"
-ui:
-  custom_dir: "./custom_web" # Опционально: путь для переопределения интерфейса
-jwt:
-  private_key_path: "certs/private.pem"
-  public_key_path: "certs/public.pem"
-```
+2. **Добавьте ваши файлы:**
+   Поместите измененные HTML-файлы в папку `templates/` (например, `login.html`, `admin.html`). Поместите CSS-файлы в `static/css/` (например, `style.css`). Убедитесь, что вы сохраняете имена файлов, ожидаемые сервером.
 
-### 2. Запуск сервера
-Сгенерируйте RSA ключи в папке `certs/` и запустите сервер:
-```bash
-go run ./cmd/server
-```
+3. **Обновите `config.yaml`:**
+   Укажите серверу путь к вашей новой директории с помощью параметра `ui.custom_dir`:
+   ```yaml
+   ui:
+     custom_dir: "/opt/zenithsso/custom_ui"
+   ```
 
-## 📚 Примеры API
-
-### Получение токенов
-```bash
-curl -X POST http://localhost:8080/api/v1/token \
-  -d "grant_type=authorization_code" \
-  -d "code=YOUR_CODE" \
-  -d "client_id=test_client" \
-  -d "client_secret=secret123" \
-  -d "redirect_uri=http://localhost/callback" \
-  -d "code_verifier=YOUR_PKCE_VERIFIER"
-```
-
-### Получение информации о пользователе
-```bash
-curl -X GET http://localhost:8080/api/v1/userinfo \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-*Если в токене есть scope `profile`, сервис вернет `given_name`, `family_name`, `picture` и `locale`!*
-
----
-Сделано с ❤️ с использованием стандартной библиотеки Go.
+После перезапуска ZenithSSO будет использовать ваши файлы вместо встроенных!

@@ -137,11 +137,11 @@ func (r *UserRepository) DeleteUser(ctx context.Context, id uint64) error {
 	return err
 }
 
-func (r *UserRepository) CreateScope(ctx context.Context, name string) (uint64, error) {
+func (r *UserRepository) CreateScope(ctx context.Context, name string, description string) (uint64, error) {
 	var id uint64
-	query := `INSERT INTO scopes (name) VALUES ($1) RETURNING id`
+	query := `INSERT INTO scopes (name, description) VALUES ($1, $2) RETURNING id`
 
-	err := r.db.QueryRowContext(ctx, query, name).Scan(&id)
+	err := r.db.QueryRowContext(ctx, query, name, description).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
@@ -201,6 +201,16 @@ func (r *UserRepository) GetAllUsers(ctx context.Context) ([]domain.User, error)
 		return nil, err
 	}
 	return users, nil
+}
+
+func (r *UserRepository) GetAllScopes(ctx context.Context) ([]domain.Scope, error) {
+	query := `SELECT id, name, COALESCE(description, '') as description FROM scopes ORDER BY id ASC`
+	var scopes []domain.Scope
+	err := r.db.SelectContext(ctx, &scopes, query)
+	if err != nil {
+		return nil, err
+	}
+	return scopes, nil
 }
 
 func (r *UserRepository) GetUserById(ctx context.Context, userID uint64) (*domain.User, error) {

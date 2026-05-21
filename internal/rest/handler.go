@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"AuthServer/internal/encoder"
@@ -71,6 +72,8 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router, customDir string) {
 	r.Post("/logout", h.LogoutPOSTHandler)
 
 	r.Get("/admin", h.AdminGETHandler)
+	r.Post("/admin/scopes", h.AdminCreateScopePOSTHandler)
+	r.Post("/admin/users/scopes", h.AdminAssignScopePOSTHandler)
 
 	uiFS := GetFS(customDir)
 	staticFS, err := fs.Sub(uiFS, "static")
@@ -669,21 +672,102 @@ func (h *AuthHandler) AdminGETHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	users, err := h.authService.GetAllUsers(r.Context())
+	scopes, errScopes := h.authService.GetAllScopes(r.Context())
 
 	q := r.URL.Query()
 	data := map[string]interface{}{
-		"User":  user,
-		"Users": users,
-		"Error": q.Get("error"),
-		"T":     Translate(r),
+		"User":   user,
+		"Users":  users,
+		"Scopes": scopes,
+		"Error":  q.Get("error"),
+		"T":      Translate(r),
 	}
 
-	if err != nil {
-		data["Error"] = "Failed to load users"
+	if err != nil || errScopes != nil {
+		data["Error"] = "Failed to load data"
 	}
 
 	err = h.templates.ExecuteTemplate(w, "admin.html", data)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
+}
+
+func (h *AuthHandler) checkAdminAccess(r *http.Request) bool {
+	cookie, err := r.Cookie("sso_session")
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	user, err := h.authService.GetUserInfo(r.Context(), cookie.Value)
+	if err != nil {
+		return false
+	}
+	for _, scope := range user.Scopes {
+		if scope.Name == "root" {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *AuthHandler) AdminCreateScopePOSTHandler(w http.ResponseWriter, r *http.Request) {
+	if !h.checkAdminAccess(r) {
+		http.Error(w, "forbidden: admin access required", http.StatusForbidden)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin?error=invalid_request", http.StatusFound)
+		return
+	}
+
+	name := r.FormValue("name")
+	description := r.FormValue("description")
+
+	if name == "" {
+		http.Redirect(w, r, "/admin?error=name_required", http.StatusFound)
+		return
+	}
+
+	_, err := h.authService.CreateScope(r.Context(), name, description)
+	if err != nil {
+		http.Redirect(w, r, "/admin?error=create_failed", http.StatusFound)
+		return
+	}
+
+	http.Redirect(w, r, "/admin?success=scope_created", http.StatusFound)
+}
+
+func (h *AuthHandler) AdminAssignScopePOSTHandler(w http.ResponseWriter, r *http.Request) {
+	if !h.checkAdminAccess(r) {
+		http.Error(w, "forbidden: admin access required", http.StatusForbidden)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin?error=invalid_request", http.StatusFound)
+		return
+	}
+
+	userIDStr := r.FormValue("user_id")
+	scopeIDStr := r.FormValue("scope_id")
+
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		http.Redirect(w, r, "/admin?error=invalid_user_id", http.StatusFound)
+		return
+	}
+	scopeID, err := strconv.ParseUint(scopeIDStr, 10, 64)
+	if err != nil {
+		http.Redirect(w, r, "/admin?error=invalid_scope_id", http.StatusFound)
+		return
+	}
+
+	err = h.authService.AssignScopeToUser(r.Context(), userID, scopeID)
+	if err != nil {
+		http.Redirect(w, r, "/admin?error=assign_failed", http.StatusFound)
+		return
+	}
+
+	http.Redirect(w, r, "/admin?success=scope_assigned", http.StatusFound)
 }

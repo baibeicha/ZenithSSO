@@ -13,11 +13,13 @@ import (
 type AuthHandler struct {
 	api.UnimplementedAuthServiceServer
 	authUsecase *usecase.AuthUsecase
+	sessionUsecase *usecase.SessionUsecase
 }
 
-func NewAuthHandler(authUsecase *usecase.AuthUsecase) *AuthHandler {
+func NewAuthHandler(authUsecase *usecase.AuthUsecase, sessionUsecase *usecase.SessionUsecase) *AuthHandler {
 	return &AuthHandler{
-		authUsecase: authUsecase,
+		authUsecase:    authUsecase,
+		sessionUsecase: sessionUsecase,
 	}
 }
 
@@ -130,11 +132,50 @@ func (h *AuthHandler) Revoke(ctx context.Context, req *api.RevokeRequest) (*api.
 }
 
 func (h *AuthHandler) Sessions(ctx context.Context, req *api.SessionsRequest) (*api.SessionsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Sessions not implemented")
+	user, err := h.authUsecase.GetUserInfo(ctx, req.GetAccessToken())
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
+	}
+
+	sessions, err := h.sessionUsecase.GetUserSessions(ctx, user.ID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get sessions: %v", err)
+	}
+
+	var pbSessions []*api.SessionInfo
+	for _, s := range sessions {
+		pbSessions = append(pbSessions, &api.SessionInfo{
+			Token:     s.Token,
+			IpAddress: s.IPAddress,
+			UserAgent: s.UserAgent,
+			CreatedAt: s.CreatedAt.String(),
+			ExpiresAt: s.ExpiresAt.String(),
+			ClientId:  s.ClientID,
+		})
+	}
+
+	return &api.SessionsResponse{
+		Sessions: pbSessions,
+	}, nil
 }
 
 func (h *AuthHandler) RevokeSession(ctx context.Context, req *api.RevokeSessionRequest) (*api.Status, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RevokeSession not implemented")
+	user, err := h.authUsecase.GetUserInfo(ctx, req.GetAccessToken())
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
+	}
+
+	if req.GetAllExceptCurrent() {
+		err = h.sessionUsecase.RevokeAllExceptCurrent(ctx, user.ID, req.GetSessionTokenToRevoke())
+	} else {
+		err = h.sessionUsecase.RevokeSession(ctx, user.ID, req.GetSessionTokenToRevoke())
+	}
+
+	if err != nil {
+		return &api.Status{Status: false, Message: stringPtr(err.Error())}, nil
+	}
+
+	return &api.Status{Status: true}, nil
 }
 
 func stringPtr(s string) *string {
