@@ -32,14 +32,6 @@
         Нет аккаунта? <a href="/api/v1/register" id="register-link" style="color: var(--primary-color); text-decoration: none;">Зарегистрироваться</a>
     </p>
 </div>
-<script src="/static/js/auth.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const registerLink = document.getElementById('register-link');
-        if (window.location.search) {
-            registerLink.href = "/api/v1/register" + window.location.search;
-        }
-    });
-</script>
+<script src="/static/js/authorize.js"></script>
 </body>
 </html>

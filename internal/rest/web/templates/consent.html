@@ -25,31 +25,6 @@
         <button type="button" class="btn secondary" onclick="history.back()">Отмена</button>
     </form>
 </div>
-
-<script src="/static/js/auth.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const params = new URLSearchParams(window.location.search);
-
-        const clientName = params.get('client_id');
-        if (clientName) document.getElementById('app-name').innerText = clientName;
-
-        const scopesStr = params.get('scope') || '';
-        const scopesList = document.getElementById('scopes-list');
-
-        if (scopesStr) {
-            const scopes = scopesStr.split(' ');
-            scopes.forEach(s => {
-                if (s) {
-                    const li = document.createElement('li');
-                    li.innerText = s;
-                    scopesList.appendChild(li);
-                }
-            });
-        } else {
-            scopesList.innerHTML = "<li>Базовый профиль</li>";
-        }
-    });
-</script>
+<script src="/static/js/consent.js"></script>
 </body>
 </html>

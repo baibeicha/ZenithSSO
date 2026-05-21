@@ -15,8 +15,8 @@ server:
 datasource:
   url: "195.208.118.156:5432"
   db: auth
-  user: user
-  password: password
+  user: bbcpuser
+  password: bbcp_pass
 
 superuser:
   username: admin
